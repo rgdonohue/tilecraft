@@ -171,8 +171,8 @@ class OSMDownloader:
                     
                     # Check for HTTP errors
                     if response.status_code != 200:
-                        error_text = await response.atext()
-                        error_msg = self._parse_overpass_error(error_text)
+                        error_text = await response.aread()
+                        error_msg = self._parse_overpass_error(error_text.decode('utf-8', errors='ignore'))
                         
                         if response.status_code == 429:
                             raise RateLimitError(f"Rate limited: {error_msg}")

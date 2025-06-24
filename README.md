@@ -60,6 +60,13 @@ tilecraft \
   --bbox "-122.5,37.7,-122.3,37.8" \
   --features "roads,buildings,parks" \
   --palette "urban midnight"
+
+
+**Historic Downtown**
+tilecraft \
+  --bbox "-106.81,37.36,-104.49,38.39" \
+  --features "rivers,forest,water" \
+  --palette "subalpine dusk"
 ```
 
 ## 📖 Usage

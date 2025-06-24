@@ -123,26 +123,26 @@ class TileGenerator:
         # Validate tippecanoe availability
         self._validate_tippecanoe()
         
-        # Validate input files
-        self._validate_input_files(feature_files)
+        # Validate input files and filter out empty ones
+        validated_files = self._validate_and_filter_input_files(feature_files)
         
         # Check cache first
-        cache_key = self._generate_cache_key(feature_files)
+        cache_key = self._generate_cache_key(validated_files)
         if self.cache_manager:
             cached_path = self.cache_manager.get_cached_tiles(cache_key)
             if cached_path and cached_path.exists():
                 logger.info(f"Using cached tiles: {cached_path}")
                 return cached_path
         
-        logger.info(f"Generating vector tiles from {len(feature_files)} feature files")
-        self._log_input_statistics(feature_files)
+        logger.info(f"Generating vector tiles from {len(validated_files)} feature files")
+        self._log_input_statistics(validated_files)
         
         # Start processing statistics
         self.processing_stats['start_time'] = datetime.now()
-        self.processing_stats['input_files'] = len(feature_files)
+        self.processing_stats['input_files'] = len(validated_files)
         
         # Generate tiles with retry logic
-        output_path = self._generate_with_retry(feature_files)
+        output_path = self._generate_with_retry(validated_files)
         
         # Validate output
         self._validate_output(output_path)
@@ -192,39 +192,64 @@ class TileGenerator:
                 "https://github.com/felt/tippecanoe#installation"
             )
     
-    def _validate_input_files(self, feature_files: Dict[str, Path]) -> None:
+    def _validate_and_filter_input_files(self, feature_files: Dict[str, Path]) -> Dict[str, Path]:
         """
-        Validate input GeoJSON files.
+        Validate input GeoJSON files and filter out empty ones.
         
         Args:
             feature_files: Feature files to validate
             
+        Returns:
+            Dictionary of validated files with non-empty feature collections
+            
         Raises:
-            TileGenerationError: Invalid input files
+            TileGenerationError: Invalid input files or no valid files found
         """
+        validated_files = {}
+        
         for feature_type, file_path in feature_files.items():
             if not file_path.exists():
                 raise TileGenerationError(f"Feature file not found: {file_path}")
             
             if file_path.stat().st_size == 0:
-                logger.warning(f"Empty feature file: {feature_type} ({file_path})")
+                logger.warning(f"Skipping empty feature file: {feature_type} ({file_path})")
                 continue
             
-            # Basic GeoJSON validation
+            # Basic GeoJSON validation and check for features
             try:
                 with open(file_path, 'r') as f:
-                    # Read first few lines to validate JSON structure
-                    content = f.read(1000)
+                    content = f.read()
                     if not content.strip().startswith('{'):
                         raise TileGenerationError(f"Invalid GeoJSON format: {file_path}")
                     
-                    # Try to parse the beginning as JSON
-                    json.loads(content + '}' if not content.rstrip().endswith('}') else content)
+                    # Parse the full JSON to check for features
+                    geojson_data = json.loads(content)
+                    
+                    # Check if it's a valid FeatureCollection
+                    if geojson_data.get('type') != 'FeatureCollection':
+                        logger.warning(f"Skipping non-FeatureCollection file: {feature_type} ({file_path})")
+                        continue
+                    
+                    # Check if it has features
+                    features = geojson_data.get('features', [])
+                    if not features or len(features) == 0:
+                        logger.warning(f"Skipping feature file with no features: {feature_type} ({file_path})")
+                        continue
+                    
+                    # File is valid and has features
+                    validated_files[feature_type] = file_path
+                    logger.info(f"Validated {feature_type}: {len(features)} features")
                     
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
                 raise TileGenerationError(f"Invalid GeoJSON file {file_path}: {e}")
             except Exception as e:
                 logger.warning(f"Could not fully validate {file_path}: {e}")
+        
+        # Check if we have any valid files
+        if not validated_files:
+            raise TileGenerationError("No valid feature files with data found for tile generation")
+        
+        return validated_files
     
     def _generate_cache_key(self, feature_files: Dict[str, Path]) -> str:
         """
@@ -363,9 +388,12 @@ class TileGenerator:
                 
                 # Move temporary file to final location
                 if temp_output.exists():
+                    logger.info(f"Moving temporary file from {temp_output} to {output_path}")
                     shutil.move(str(temp_output), str(output_path))
                     progress.update(main_task, description="Tile generation complete")
+                    logger.info(f"File moved successfully, size: {output_path.stat().st_size} bytes")
                 else:
+                    logger.error(f"Temporary output file not found: {temp_output}")
                     raise TippecanoeError("Tippecanoe completed but output file not found")
                 
                 return output_path
@@ -381,73 +409,55 @@ class TileGenerator:
     
     def _build_tippecanoe_command(self, feature_files: Dict[str, Path], output_path: Path, attempt: int) -> List[str]:
         """
-        Build optimized tippecanoe command with feature-specific settings.
+        Build tippecanoe command with all options and optimizations.
         
         Args:
-            feature_files: Input feature files
-            output_path: Output MBTiles path
-            attempt: Current attempt number for optimization
+            feature_files: Dictionary mapping feature types to their GeoJSON file paths
+            output_path: Path where tiles will be saved
+            attempt: Current attempt number (for retry logic)
             
         Returns:
-            Command arguments list
+            Complete tippecanoe command as list of strings
         """
         cmd = ['tippecanoe']
         
-        # Basic zoom settings
+        # Basic zoom levels
         cmd.extend([
             f'--minimum-zoom={self.config.tiles.min_zoom}',
-            f'--maximum-zoom={self.config.tiles.max_zoom}',
+            f'--maximum-zoom={self.config.tiles.max_zoom}'
+        ])
+        
+        # Tile resolution
+        cmd.extend([
+            f'--full-detail={self.config.tiles.detail}',
+            f'--low-detail={self.config.tiles.detail}',
+            f'--minimum-detail={max(1, self.config.tiles.detail - 5)}'  # Fallback detail
+        ])
+        
+        # Buffer and clipping
+        cmd.extend([
             f'--buffer={self.config.tiles.buffer}',
         ])
         
-        # Get quality settings
-        quality_settings = self.config.tiles.get_quality_settings()
+        # Feature optimization
+        cmd.extend([
+            f'--drop-rate={self.config.tiles.drop_rate}',
+            '--no-feature-limit',  # Allow more features per tile
+            '--drop-densest-as-needed',  # Adaptive feature dropping
+        ])
         
-        # Apply quality-based settings (more conservative on retries)
-        if attempt > 0:
-            # More conservative settings for retries
-            cmd.extend([
-                f'--drop-rate={quality_settings["drop_rate"] * (1.5 ** attempt)}',
-                f'--simplification={quality_settings["simplification"] * (1.2 ** attempt)}',
-            ])
-        else:
-            cmd.extend([
-                f'--drop-rate={quality_settings["drop_rate"]}',
-                f'--simplification={quality_settings["simplification"]}',
-            ])
+        # Simplification
+        cmd.extend([
+            f'--simplification={self.config.tiles.simplification}',
+        ])
         
-        # Feature and tile limits
-        if quality_settings.get("no_feature_limit", True):
-            cmd.append('--no-feature-limit')
-        elif self.config.tiles.force_feature_limit:
-            cmd.append(f'--feature-limit={self.config.tiles.force_feature_limit}')
-        
-        if quality_settings.get("no_tile_size_limit", True):
-            cmd.append('--no-tile-size-limit')
-        elif self.config.tiles.maximum_tile_bytes:
-            cmd.append(f'--maximum-tile-bytes={self.config.tiles.maximum_tile_bytes}')
-        
-        # Advanced options
-        if self.config.tiles.maximum_tile_features:
-            cmd.append(f'--maximum-tile-features={self.config.tiles.maximum_tile_features}')
-        
-        if self.config.tiles.simplification_at_max_zoom > 0:
+        if hasattr(self.config.tiles, 'simplification_at_max_zoom') and self.config.tiles.simplification_at_max_zoom:
             cmd.append(f'--simplification-at-maximum-zoom={self.config.tiles.simplification_at_max_zoom}')
         
-        # Layer-specific configurations
+        # Add input files without per-layer zoom settings since those arguments don't exist
         for feature_type, geojson_path in feature_files.items():
-            layer_config = self.config.tiles.get_layer_config(feature_type)
-            
-            # Add layer with specific zoom range
-            layer_min_zoom = layer_config.get('min_zoom', self.config.tiles.min_zoom)
-            layer_max_zoom = layer_config.get('max_zoom', self.config.tiles.max_zoom)
-            
-            cmd.extend([
-                f'--layer={feature_type}',
-                f'--minimum-zoom-for-layer={feature_type}:{layer_min_zoom}',
-                f'--maximum-zoom-for-layer={feature_type}:{layer_max_zoom}',
-                str(geojson_path)
-            ])
+            # Use the basic -L layer naming syntax that actually exists
+            cmd.extend(['-L', f'{feature_type}:{geojson_path}'])
         
         # Output options
         cmd.extend([
@@ -481,7 +491,7 @@ class TileGenerator:
         Returns:
             Completed process result
         """
-        logger.debug(f"Executing: {' '.join(cmd)}")
+        logger.info(f"Executing tippecanoe command: {' '.join(cmd)}")
         progress.update(task_id, description="Starting tippecanoe...")
         
         try:
@@ -505,6 +515,7 @@ class TileGenerator:
                 if output:
                     line = output.strip()
                     output_lines.append(line)
+                    logger.debug(f"Tippecanoe output: {line}")
                     
                     # Parse progress information
                     stage = self._parse_tippecanoe_progress(line)
@@ -514,13 +525,15 @@ class TileGenerator:
                     
                     # Log important messages
                     if any(pattern in line for pattern in ["Error", "Warning", "Created"]):
-                        logger.debug(f"Tippecanoe: {line}")
+                        logger.info(f"Tippecanoe: {line}")
             
             # Wait for process completion
             return_code = process.poll()
+            logger.info(f"Tippecanoe completed with exit code: {return_code}")
             
             if return_code != 0:
-                error_output = '\n'.join(output_lines[-10:])  # Last 10 lines
+                error_output = '\n'.join(output_lines[-20:])  # Last 20 lines for more context
+                logger.error(f"Tippecanoe failed with output: {error_output}")
                 error_msg = self._parse_tippecanoe_error(error_output)
                 raise TippecanoeError(f"Tippecanoe failed (exit code {return_code}): {error_msg}")
             
@@ -531,7 +544,7 @@ class TileGenerator:
                 stderr=None
             )
             
-            logger.debug(f"Tippecanoe completed successfully")
+            logger.info(f"Tippecanoe completed successfully")
             return result
             
         except subprocess.TimeoutExpired:
@@ -541,6 +554,7 @@ class TileGenerator:
         except Exception as e:
             if process:
                 process.kill()
+            logger.error(f"Exception during tippecanoe execution: {e}")
             raise TippecanoeError(f"Error executing tippecanoe: {e}")
     
     def _parse_tippecanoe_progress(self, line: str) -> str:
@@ -623,7 +637,7 @@ class TileGenerator:
     
     def _validate_output(self, output_path: Path) -> None:
         """
-        Comprehensive validation of generated MBTiles file.
+        Comprehensive validation of generated MBTiles file with retry logic.
         
         Args:
             output_path: Path to MBTiles file to validate
@@ -637,65 +651,145 @@ class TileGenerator:
         if output_path.stat().st_size == 0:
             raise ValidationError(f"Output file is empty: {output_path}")
         
-        try:
-            # Validate SQLite database structure
-            with sqlite3.connect(output_path) as conn:
-                cursor = conn.cursor()
+        # Retry validation to handle race conditions with tippecanoe
+        max_validation_retries = 3
+        validation_delay = 2.0  # seconds
+        
+        for attempt in range(max_validation_retries):
+            try:
+                logger.debug(f"Validation attempt {attempt + 1}/{max_validation_retries} for file: {output_path}")
+                logger.debug(f"File exists: {output_path.exists()}, size: {output_path.stat().st_size if output_path.exists() else 'N/A'}")
                 
-                # Check required tables
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-                tables = {row[0] for row in cursor.fetchall()}
-                
-                required_tables = {'metadata', 'tiles'}
-                missing_tables = required_tables - tables
-                if missing_tables:
-                    raise ValidationError(f"Missing required tables: {missing_tables}")
-                
-                # Validate metadata
-                cursor.execute("SELECT name, value FROM metadata")
-                metadata = dict(cursor.fetchall())
-                
-                if 'format' not in metadata:
-                    raise ValidationError("Missing format in metadata")
-                if metadata['format'] != 'pbf':
-                    logger.warning(f"Unexpected tile format: {metadata['format']}")
-                
-                # Check tile count
-                cursor.execute("SELECT COUNT(*) FROM tiles")
-                tile_count = cursor.fetchone()[0]
-                
-                if tile_count == 0:
-                    raise ValidationError("No tiles generated")
-                
-                # Validate zoom levels
-                cursor.execute("SELECT MIN(zoom_level), MAX(zoom_level) FROM tiles")
-                min_zoom, max_zoom = cursor.fetchone()
-                
-                if min_zoom is None or max_zoom is None:
-                    raise ValidationError("Invalid zoom levels in tiles")
-                
-                if min_zoom < self.config.tiles.min_zoom:
-                    logger.warning(f"Generated tiles include zoom {min_zoom} below configured minimum {self.config.tiles.min_zoom}")
-                
-                if max_zoom > self.config.tiles.max_zoom:
-                    logger.warning(f"Generated tiles include zoom {max_zoom} above configured maximum {self.config.tiles.max_zoom}")
-                
-                # Sample tile validation
-                cursor.execute("SELECT tile_data FROM tiles LIMIT 1")
-                sample_tile = cursor.fetchone()
-                if not sample_tile or not sample_tile[0]:
-                    raise ValidationError("Invalid tile data found")
-                
-                # Update statistics
-                self.processing_stats['tiles_generated'] = tile_count
-                self.processing_stats['output_size_bytes'] = output_path.stat().st_size
-                
-                logger.info(f"Generated {tile_count} tiles, zoom levels {min_zoom}-{max_zoom}")
-                
-        except sqlite3.Error as e:
-            raise ValidationError(f"SQLite validation failed: {e}")
-        except Exception as e:
-            raise ValidationError(f"Output validation failed: {e}")
+                # Validate SQLite database structure
+                with sqlite3.connect(output_path) as conn:
+                    cursor = conn.cursor()
+                    
+                    # Check required tables
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                    tables = {row[0] for row in cursor.fetchall()}
+                    logger.debug(f"Found tables: {tables}")
+                    
+                    # Check for either tiles table (older format) or map+images tables (newer format)
+                    required_tables = {'metadata'}
+                    missing_tables = required_tables - tables
+                    
+                    # Check for valid tile storage format
+                    has_old_format = 'tiles' in tables
+                    has_new_format = 'map' in tables and 'images' in tables
+                    
+                    if missing_tables or not (has_old_format or has_new_format):
+                        if attempt < max_validation_retries - 1:
+                            format_info = f"old_format: {has_old_format}, new_format: {has_new_format}, tables: {tables}"
+                            logger.info(f"Validation failed ({format_info}) on attempt {attempt + 1}, retrying in {validation_delay}s...")
+                            time.sleep(validation_delay)
+                            continue
+                        else:
+                            if missing_tables:
+                                raise ValidationError(f"Missing required tables: {missing_tables}")
+                            if not (has_old_format or has_new_format):
+                                raise ValidationError(f"Invalid MBTiles format (expected 'tiles' table or 'map'+'images' tables, found: {tables})")
+                    
+                    # Validate metadata
+                    cursor.execute("SELECT name, value FROM metadata")
+                    metadata = dict(cursor.fetchall())
+                    
+                    if 'format' not in metadata:
+                        if attempt < max_validation_retries - 1:
+                            logger.debug(f"Missing format metadata on attempt {attempt + 1}, retrying in {validation_delay}s...")
+                            time.sleep(validation_delay)
+                            continue
+                        else:
+                            raise ValidationError("Missing format in metadata")
+                    if metadata['format'] != 'pbf':
+                        logger.warning(f"Unexpected tile format: {metadata['format']}")
+                    
+                    # Check tile count (handle both tiles and map table formats)
+                    if 'tiles' in tables:
+                        cursor.execute("SELECT COUNT(*) FROM tiles")
+                        tile_count = cursor.fetchone()[0]
+                        
+                        if tile_count == 0:
+                            if attempt < max_validation_retries - 1:
+                                logger.debug(f"No tiles found on attempt {attempt + 1}, retrying in {validation_delay}s...")
+                                time.sleep(validation_delay)
+                                continue
+                            else:
+                                raise ValidationError("No tiles generated")
+                        
+                        # Validate zoom levels
+                        cursor.execute("SELECT MIN(zoom_level), MAX(zoom_level) FROM tiles")
+                        min_zoom, max_zoom = cursor.fetchone()
+                    elif 'map' in tables:
+                        cursor.execute("SELECT COUNT(*) FROM map")
+                        tile_count = cursor.fetchone()[0]
+                        
+                        if tile_count == 0:
+                            if attempt < max_validation_retries - 1:
+                                logger.debug(f"No tiles found on attempt {attempt + 1}, retrying in {validation_delay}s...")
+                                time.sleep(validation_delay)
+                                continue
+                            else:
+                                raise ValidationError("No tiles generated")
+                        
+                        # Validate zoom levels (map table uses different column name)
+                        cursor.execute("SELECT MIN(zoom_level), MAX(zoom_level) FROM map")
+                        min_zoom, max_zoom = cursor.fetchone()
+                    else:
+                        raise ValidationError("No tile data table found")
+                    
+                    if min_zoom is None or max_zoom is None:
+                        if attempt < max_validation_retries - 1:
+                            logger.debug(f"Invalid zoom levels on attempt {attempt + 1}, retrying in {validation_delay}s...")
+                            time.sleep(validation_delay)
+                            continue
+                        else:
+                            raise ValidationError("Invalid zoom levels in tiles")
+                    
+                    if min_zoom < self.config.tiles.min_zoom:
+                        logger.warning(f"Generated tiles include zoom {min_zoom} below configured minimum {self.config.tiles.min_zoom}")
+                    
+                    if max_zoom > self.config.tiles.max_zoom:
+                        logger.warning(f"Generated tiles include zoom {max_zoom} above configured maximum {self.config.tiles.max_zoom}")
+                    
+                    # Sample tile validation (handle both table formats)
+                    if 'tiles' in tables:
+                        cursor.execute("SELECT tile_data FROM tiles LIMIT 1")
+                        sample_tile = cursor.fetchone()
+                    elif 'map' in tables and 'images' in tables:
+                        cursor.execute("SELECT tile_data FROM images LIMIT 1")
+                        sample_tile = cursor.fetchone()
+                    else:
+                        sample_tile = None
+                        
+                    if not sample_tile or not sample_tile[0]:
+                        if attempt < max_validation_retries - 1:
+                            logger.debug(f"Invalid tile data on attempt {attempt + 1}, retrying in {validation_delay}s...")
+                            time.sleep(validation_delay)
+                            continue
+                        else:
+                            raise ValidationError("Invalid tile data found")
+                    
+                    # Update statistics
+                    self.processing_stats['tiles_generated'] = tile_count
+                    self.processing_stats['output_size_bytes'] = output_path.stat().st_size
+                    
+                    logger.info(f"Generated {tile_count} tiles, zoom levels {min_zoom}-{max_zoom}")
+                    return  # Success - exit retry loop
+                    
+            except sqlite3.Error as e:
+                if attempt < max_validation_retries - 1:
+                    logger.debug(f"SQLite error on attempt {attempt + 1}: {e}, retrying in {validation_delay}s...")
+                    time.sleep(validation_delay)
+                    continue
+                else:
+                    raise ValidationError(f"SQLite validation failed: {e}")
+            except Exception as e:
+                if attempt < max_validation_retries - 1:
+                    logger.debug(f"Validation error on attempt {attempt + 1}: {e}, retrying in {validation_delay}s...")
+                    time.sleep(validation_delay)
+                    continue
+                else:
+                    raise ValidationError(f"Output validation failed: {e}")
     
     def _log_input_statistics(self, feature_files: Dict[str, Path]) -> None:
         """Log statistics about input files."""

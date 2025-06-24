@@ -137,7 +137,7 @@ class CacheManager:
             Path to cached file
         """
         key = self._get_cache_key(f"osm_data_{bbox_str}")
-        return self.put(key, data_path, ".osm.pbf")
+        return self.put(key, data_path, ".osm")
     
     def get_cached_osm_data(self, bbox_str: str) -> Optional[Path]:
         """
@@ -150,7 +150,7 @@ class CacheManager:
             Path to cached file or None
         """
         key = self._get_cache_key(f"osm_data_{bbox_str}")
-        return self.get(key, ".osm.pbf")
+        return self.get(key, ".osm")
     
     def cache_features(self, feature_type: str, bbox_str: str, geojson_path: Path) -> Path:
         """

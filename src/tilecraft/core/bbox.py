@@ -82,7 +82,6 @@ def bbox_to_overpass_query(bbox: BoundingBox, feature_types: List[str]) -> str:
             queries.append('way["landuse"="forest"]')
         elif feature_type == "water":
             queries.append('way["natural"="water"]')
-            queries.append('relation["natural"="water"]')
         elif feature_type == "lakes":
             queries.append('way["natural"="water"]["water"="lake"]')
         elif feature_type == "parks":

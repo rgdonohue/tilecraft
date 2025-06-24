@@ -152,6 +152,7 @@ class TileConfig(BaseModel):
     min_zoom: int = Field(default=0, ge=0, le=24, description="Minimum zoom level")
     max_zoom: int = Field(default=14, ge=0, le=24, description="Maximum zoom level")
     buffer: int = Field(default=64, description="Tile buffer in pixels")
+    detail: int = Field(default=12, ge=7, le=15, description="Tile detail level (7-15)")
     simplification: float = Field(default=1.0, description="Geometry simplification factor")
     
     # Advanced tippecanoe options
@@ -286,7 +287,8 @@ class TilecraftConfig(BaseSettings):
     model_config = ConfigDict(
         env_prefix="TILECRAFT_",
         env_file=".env",
-        case_sensitive=False
+        case_sensitive=False,
+        extra='forbid'
     )
     
     bbox: BoundingBox
@@ -298,4 +300,20 @@ class TilecraftConfig(BaseSettings):
     
     # Processing options
     cache_enabled: bool = Field(default=True, description="Enable caching")
-    verbose: bool = Field(default=False, description="Verbose output") 
+    verbose: bool = Field(default=False, description="Verbose output")
+    
+    @model_validator(mode='before')
+    @classmethod
+    def handle_openai_api_key(cls, values):
+        """Handle OPENAI_API_KEY environment variable mapping to ai.api_key."""
+        if isinstance(values, dict):
+            # If we have openai_api_key from env vars, map it to ai.api_key
+            if 'openai_api_key' in values:
+                if 'ai' not in values:
+                    values['ai'] = {}
+                if isinstance(values['ai'], dict) and 'api_key' not in values['ai']:
+                    values['ai']['api_key'] = values.pop('openai_api_key')
+                else:
+                    # Remove the extra field to prevent validation error
+                    values.pop('openai_api_key', None)
+        return values 

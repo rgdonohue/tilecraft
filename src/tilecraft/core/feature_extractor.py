@@ -53,8 +53,18 @@ class OSMFeatureHandler(osmium.SimpleHandler):
         self.processed_count = 0
         self.error_count = 0
         
+        # Debug counters
+        self.nodes_seen = 0
+        self.ways_seen = 0
+        self.ways_matched = 0
+        
+        # Debug logging
+        logger.debug(f"OSMFeatureHandler initialized for {feature_type.value} with filters: {tag_filters}")
+        
     def node(self, n):
         """Process OSM nodes."""
+        self.nodes_seen += 1
+        
         if self._matches_filters(n.tags):
             try:
                 feature = self._create_point_feature(n)
@@ -67,15 +77,25 @@ class OSMFeatureHandler(osmium.SimpleHandler):
     
     def way(self, w):
         """Process OSM ways."""
+        self.ways_seen += 1
+        
+        if self.ways_seen <= 3:
+            logger.info(f"Processing way {w.id} with tags: {dict(w.tags)}")
+        
         if self._matches_filters(w.tags):
+            self.ways_matched += 1
+            logger.info(f"Way {w.id} MATCHED! Creating feature...")
             try:
                 feature = self._create_way_feature(w)
                 if feature:
                     self.features.append(feature)
                     self.processed_count += 1
+                    logger.info(f"Way {w.id} feature created successfully")
+                else:
+                    logger.warning(f"Way {w.id} matched but feature creation failed")
             except Exception as e:
                 self.error_count += 1
-                logger.debug(f"Error processing way {w.id}: {e}")
+                logger.error(f"Error processing way {w.id}: {e}")
     
     def relation(self, r):
         """Process OSM relations."""
@@ -98,14 +118,24 @@ class OSMFeatureHandler(osmium.SimpleHandler):
         Returns:
             True if tags match filters
         """
+        # Reduced debug logging
+        should_debug = False  # Turn off excessive debug logging
+        
+        if should_debug:
+            logger.debug(f"Checking tags: {dict(tags)} against filters: {self.tag_filters}")
+        
         for key, values in self.tag_filters.items():
             if key in tags:
                 tag_value = tags[key]
                 # Handle wildcard matches
                 if '*' in values:
+                    if should_debug:
+                        logger.debug(f"Wildcard match found: {key}={tag_value}")
                     return True
                 # Handle exact matches
                 if tag_value in values:
+                    if should_debug:
+                        logger.debug(f"Exact match found: {key}={tag_value}")
                     return True
                 # Handle pattern matches (basic support)
                 for value in values:
@@ -113,7 +143,12 @@ class OSMFeatureHandler(osmium.SimpleHandler):
                         # Simple regex-like matching
                         pattern = value.replace('~', '')
                         if pattern in tag_value:
+                            if should_debug:
+                                logger.debug(f"Pattern match found: {key}={tag_value} matches {pattern}")
                             return True
+        
+        if should_debug:
+            logger.debug(f"No match found for tags: {dict(tags)}")
         return False
     
     def _create_point_feature(self, node) -> Optional[Dict[str, Any]]:
@@ -153,6 +188,7 @@ class OSMFeatureHandler(osmium.SimpleHandler):
             GeoJSON feature or None
         """
         if len(way.nodes) < 2:
+            logger.debug(f"Way {way.id}: Not enough nodes ({len(way.nodes)})")
             return None
             
         # Extract coordinates
@@ -162,6 +198,7 @@ class OSMFeatureHandler(osmium.SimpleHandler):
                 coordinates.append([float(node.location.lon), float(node.location.lat)])
         
         if len(coordinates) < 2:
+            logger.debug(f"Way {way.id}: Not enough valid coordinates ({len(coordinates)} from {len(way.nodes)} nodes)")
             return None
         
         properties = dict(way.tags)
@@ -176,6 +213,9 @@ class OSMFeatureHandler(osmium.SimpleHandler):
         geometry_type = self._determine_geometry_type(way.tags, is_closed)
         
         if geometry_type == "Polygon":
+            # Ensure polygon is closed
+            if len(coordinates) > 2 and coordinates[0] != coordinates[-1]:
+                coordinates.append(coordinates[0])
             geometry = {
                 "type": "Polygon",
                 "coordinates": [coordinates]
@@ -186,23 +226,33 @@ class OSMFeatureHandler(osmium.SimpleHandler):
                 "coordinates": coordinates
             }
         
+        logger.debug(f"Way {way.id}: Created {geometry_type} feature with {len(coordinates)} coordinates")
+        
         return {
             "type": "Feature",
             "properties": properties,
             "geometry": geometry
         }
     
-    def _determine_geometry_type(self, tags: Dict[str, str], is_closed: bool) -> str:
+    def _determine_geometry_type(self, tags, is_closed: bool) -> str:
         """
         Determine appropriate geometry type based on tags and shape.
         
         Args:
-            tags: OSM element tags
+            tags: OSM element tags (TagList or dict)
             is_closed: Whether the way is closed
             
         Returns:
             Geometry type string
         """
+        # Convert TagList to dict for easier processing
+        if hasattr(tags, 'keys'):
+            # It's already a dict-like object
+            tags_dict = dict(tags)
+        else:
+            # Convert TagList to dict
+            tags_dict = dict(tags)
+        
         # Area tags that suggest polygon geometry
         area_tags = {
             'building', 'landuse', 'natural', 'leisure', 'amenity',
@@ -215,20 +265,20 @@ class OSMFeatureHandler(osmium.SimpleHandler):
         }
         
         # Check for explicit area tag
-        if tags.get('area') == 'yes':
+        if tags_dict.get('area') == 'yes':
             return "Polygon"
-        if tags.get('area') == 'no':
+        if tags_dict.get('area') == 'no':
             return "LineString"
         
         # Check tag implications
-        for tag_key in tags.keys():
+        for tag_key in tags_dict.keys():
             if tag_key in area_tags and is_closed:
                 return "Polygon"
             if tag_key in line_tags:
                 return "LineString"
         
         # Default logic
-        if is_closed and len(set(tags.keys()) & area_tags) > 0:
+        if is_closed and len(set(tags_dict.keys()) & area_tags) > 0:
             return "Polygon"
         
         return "LineString"
@@ -261,7 +311,7 @@ class FeatureExtractor:
         # Enhanced feature type to OSM tag mappings
         self.feature_mappings = {
             FeatureType.RIVERS: {
-                'waterway': ['river', 'stream', 'canal', 'drain', 'ditch']
+                'waterway': ['river', 'stream', 'canal', 'drain', 'ditch', 'waterfall']
             },
             FeatureType.FOREST: {
                 'natural': ['wood', 'forest', 'scrub'],
@@ -398,14 +448,19 @@ class FeatureExtractor:
                     if '<?xml' not in header or '<osm' not in header:
                         raise OSMProcessingError(f"Invalid OSM XML format: {osm_data_path}")
             
-            elif osm_data_path.suffix.lower() == '.pbf':
-                # For PBF files, try to read with osmium
+            elif osm_data_path.suffix.lower() in ['.pbf', '.osm']:
+                # For PBF/OSM files, check basic file signature
                 try:
-                    reader = osmium.SimpleHandler()
-                    # Try to read just the header
-                    osmium.apply(reader, str(osm_data_path))
-                except Exception as e:
-                    raise OSMProcessingError(f"Invalid OSM PBF format: {e}")
+                    with open(osm_data_path, 'rb') as f:
+                        # Check for PBF header (first few bytes should be readable)
+                        header = f.read(16)
+                        if len(header) < 4:
+                            raise OSMProcessingError("File too small to be a valid PBF file")
+                        # Basic validation - PBF files have specific byte patterns
+                        if not header:
+                            raise OSMProcessingError("Empty PBF file")
+                except IOError as e:
+                    raise OSMProcessingError(f"Cannot read PBF file: {e}")
             
             else:
                 logger.warning(f"Unknown OSM file format: {osm_data_path.suffix}")
@@ -492,6 +547,9 @@ class FeatureExtractor:
         # Get tag filters for this feature type
         tag_filters = self._get_tag_filters(feature_type)
         
+        # Debug logging
+        logger.debug(f"Extracting {feature_type.value} with tag filters: {tag_filters}")
+        
         progress.update(task_id, description=f"Processing {feature_type.value} features...")
         
         try:
@@ -499,7 +557,7 @@ class FeatureExtractor:
             handler = OSMFeatureHandler(feature_type, tag_filters)
             
             # Process OSM data
-            osmium.apply(handler, str(osm_data_path))
+            osmium.apply(str(osm_data_path), handler)
             
             progress.update(task_id, description=f"Writing {len(handler.features)} {feature_type.value} features...")
             
@@ -511,7 +569,10 @@ class FeatureExtractor:
                     "feature_type": feature_type.value,
                     "processed_count": handler.processed_count,
                     "error_count": handler.error_count,
-                    "extraction_time": time.time()
+                    "extraction_time": time.time(),
+                    "nodes_seen": handler.nodes_seen,
+                    "ways_seen": handler.ways_seen,
+                    "ways_matched": handler.ways_matched
                 }
             }
             
@@ -634,9 +695,15 @@ class FeatureExtractor:
             if geom_type == 'Point':
                 if not isinstance(coords, list) or len(coords) != 2:
                     raise GeometryValidationError(f"Feature {index} has invalid Point coordinates")
-            elif geom_type in ['LineString', 'Polygon']:
+            elif geom_type == 'LineString':
                 if not isinstance(coords, list) or len(coords) < 2:
-                    raise GeometryValidationError(f"Feature {index} has invalid {geom_type} coordinates")
+                    raise GeometryValidationError(f"Feature {index} has invalid LineString coordinates")
+            elif geom_type == 'Polygon':
+                if not isinstance(coords, list) or len(coords) < 1:
+                    raise GeometryValidationError(f"Feature {index} has invalid Polygon coordinates - no rings")
+                # Validate first ring (exterior ring)
+                if not isinstance(coords[0], list) or len(coords[0]) < 3:
+                    raise GeometryValidationError(f"Feature {index} has invalid Polygon coordinates - exterior ring must have at least 3 points")
     
     def _count_features(self, geojson_path: Path) -> int:
         """
