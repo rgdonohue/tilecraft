@@ -1,0 +1,43 @@
+{
+  "cursor.ai.model": "claude-3.5-sonnet",
+  "cursor.ai.enableCodeCompletion": true,
+  "cursor.ai.enableInlineCompletion": true,
+  "cursor.chat.contextLength": 32000,
+  "cursor.composer.enableAutoApply": true,
+  "cursor.ai.temperature": 0.3,
+  "cursor.ai.enableContextAwareness": true,
+  
+  // Geospatial-specific settings
+  "python.defaultInterpreterPath": "./.venv/bin/python",
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+  "python.linting.enabled": true,
+  "python.linting.ruffEnabled": true,
+  "python.formatting.provider": "black",
+  "python.analysis.typeCheckingMode": "basic",
+  
+  // File associations for geospatial formats
+  "files.associations": {
+    "*.geojson": "json",
+    "*.mbtiles": "binary",
+    "*.pbf": "binary",
+    "*.osm": "xml"
+  },
+  
+  // Exclude patterns for performance
+  "files.exclude": {
+    "**/.venv": true,
+    "**/cache": true,
+    "**/*.mbtiles": true,
+    "**/*.pbf": true,
+    "**/__pycache__": true
+  },
+  
+  // AI-friendly workspace settings
+  "editor.wordWrap": "on",
+  "editor.minimap.enabled": false,
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": true
+  }
+} 
