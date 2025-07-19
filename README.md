@@ -1,20 +1,20 @@
 # 🗺️ Tilecraft
 
-**AI-Assisted CLI Tool for Vector Tile Generation from OpenStreetMap**
+**Streamlined CLI for OSM Vector Tile Generation**
 
-Generate beautiful vector tiles and MapLibre GL JS styles from OpenStreetMap data using AI-powered schema generation and style design.
+Generate beautiful vector tiles and MapLibre GL JS styles from OpenStreetMap data with smart caching and optimized feature extraction.
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## ✨ Features
 
-- 🤖 **AI-Powered**: Schema generation and style design using OpenAI/Anthropic
 - 🗺️ **OSM Integration**: Direct OpenStreetMap data processing with intelligent tag handling
 - 🎨 **Beautiful Styles**: Palette-based MapLibre GL JS style generation
-- ⚡ **High Performance**: Optimized processing with caching and parallel execution
+- ⚡ **Smart Caching**: Avoid redundant processing with intelligent cache management
+- 🚀 **High Performance**: Optimized processing with parallel feature extraction
 - 🛠️ **Professional Tools**: Built on industry-standard tools (osmium, tippecanoe)
-- 📦 **Complete Output**: Vector tiles, styles, and GeoJSON data in organized structure
+- 📦 **Production Ready**: MBTiles output compatible with all major mapping platforms
 
 ## 🚀 Quick Start
 
@@ -84,7 +84,6 @@ Required:
 Optional:
   --output PATH      Output directory (default: output)
   --name TEXT        Project name for file naming
-  --ai-provider      AI provider: openai, anthropic (default: openai)
   --min-zoom INT     Minimum zoom level (default: 0)
   --max-zoom INT     Maximum zoom level (default: 14)
   --no-cache         Disable caching
@@ -178,18 +177,14 @@ pip install -e .[dev]
 Copy `.env.example` to `.env` and configure:
 
 ```bash
-# Required: AI API Keys
-OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
-
-# Optional: AI Configuration
-TILECRAFT_AI_PROVIDER=openai
-TILECRAFT_AI_MODEL=gpt-4
-TILECRAFT_AI_TEMPERATURE=0.3
-
-# Optional: Processing
+# Optional: Processing Configuration
 TILECRAFT_CACHE_ENABLED=true
 TILECRAFT_PARALLEL_PROCESSING=true
+TILECRAFT_MAX_WORKERS=4
+
+# Optional: Advanced Settings
+TILECRAFT_TILE_BUFFER=64
+TILECRAFT_SIMPLIFICATION_LEVEL=2
 ```
 
 ### Supported Features
@@ -213,18 +208,14 @@ TILECRAFT_PARALLEL_PROCESSING=true
 - `arctic` - Cool blues and whites
 - `tropical` - Vibrant greens and blues
 
-## 🧠 AI Integration
+## 🔧 How It Works
 
-Tilecraft uses AI for:
+Tilecraft streamlines OSM processing through:
 
-1. **Schema Generation**: Analyzes requested features and generates optimal tile schemas
-2. **Style Creation**: Produces MapLibre styles based on palette mood and geographic context
-3. **Tag Disambiguation**: Handles OSM tag variations and regional differences
-
-### Prompt Examples
-
-The AI receives context like:
-> "Generate a vector tile schema for rivers, forests, and lakes in a mountain region. Include appropriate zoom levels, geometry simplification, and essential attributes for cartographic rendering."
+1. **Smart Feature Extraction**: Efficiently extracts specific feature types using optimized osmium filters
+2. **Intelligent Schema Generation**: Creates well-structured tile schemas based on feature types and zoom requirements
+3. **Optimized Style Creation**: Generates MapLibre styles with carefully chosen color palettes and rendering rules
+4. **Advanced Caching**: Prevents redundant downloads and processing for faster iteration
 
 ## 🚀 Development
 

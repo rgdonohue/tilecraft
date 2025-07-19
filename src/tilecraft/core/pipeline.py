@@ -100,8 +100,8 @@ class TilecraftPipeline:
         return feature_files
     
     def generate_schema(self) -> Dict[str, Any]:
-        """Generate vector tile schema using AI."""
-        self.logger.info("Generating tile schema with AI")
+        """Generate optimized vector tile schema."""
+        self.logger.info("Generating optimized tile schema")
         
         schema = self.schema_generator.generate(self.config.features.types)
         
@@ -124,8 +124,8 @@ class TilecraftPipeline:
         return tiles_path
     
     def generate_style(self, schema: Dict[str, Any]) -> Path:
-        """Generate MapLibre style using AI."""
-        self.logger.info("Generating MapLibre style with AI")
+        """Generate MapLibre style with palette theming."""
+        self.logger.info("Generating MapLibre style with palette theming")
         
         style_path = self.style_generator.generate(schema, self.config.palette)
         

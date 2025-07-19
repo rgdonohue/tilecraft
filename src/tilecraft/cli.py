@@ -34,7 +34,7 @@ def print_banner():
     banner = f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║                         TILECRAFT                            ║
-║              AI-Assisted Vector Tile Generation              ║
+║               OSM Vector Tile Generation                     ║
 ║                         Version {__version__}                          ║
 ╚══════════════════════════════════════════════════════════════╝
 """
@@ -91,12 +91,6 @@ def validate_features(ctx, param, value):
     help="Project name for file naming (auto-generated if not provided)"
 )
 @click.option(
-    "--ai-provider",
-    default="openai",
-    type=click.Choice(["openai", "anthropic"]),
-    help="AI provider to use (default: openai)"
-)
-@click.option(
     "--min-zoom",
     default=0,
     type=click.IntRange(0, 24),
@@ -135,7 +129,6 @@ def main(
     palette: str,
     output: str,
     name: Optional[str],
-    ai_provider: str,
     min_zoom: int,
     max_zoom: int,
     no_cache: bool,
@@ -144,10 +137,10 @@ def main(
     quiet: bool,
 ):
     """
-    Tilecraft: AI-Assisted CLI Tool for Vector Tile Generation from OSM
+    Tilecraft: Streamlined CLI for OSM Vector Tile Generation
     
     Generate beautiful vector tiles and MapLibre styles from OpenStreetMap data
-    using AI-assisted schema generation and style design.
+    with smart caching and optimized feature extraction.
     
     Example:
         tilecraft --bbox "-109.2,36.8,-106.8,38.5" --features "rivers,forest,water" --palette "subalpine dusk"
@@ -167,7 +160,6 @@ def main(
             features=features,
             palette=PaletteConfig(name=palette),
             output=OutputConfig(base_dir=Path(output), name=name),
-            ai={"provider": ai_provider},
             tiles={"min_zoom": min_zoom, "max_zoom": max_zoom},
             cache_enabled=not no_cache,
             verbose=verbose,
@@ -222,7 +214,6 @@ def display_config_summary(config: TilecraftConfig):
     table.add_row("Palette", config.palette.name)
     table.add_row("Output Directory", str(config.output.base_dir))
     table.add_row("Zoom Levels", f"{config.tiles.min_zoom} - {config.tiles.max_zoom}")
-    table.add_row("AI Provider", config.ai.provider)
     table.add_row("Cache Enabled", "Yes" if config.cache_enabled else "No")
     
     console.print("\n")

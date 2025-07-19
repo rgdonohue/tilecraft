@@ -1,9 +1,9 @@
 """
-Tilecraft: AI-Assisted CLI Tool for Vector Tile Generation from OSM
+Tilecraft: Streamlined CLI for OSM Vector Tile Generation
 
 A command-line tool that ingests OpenStreetMap (OSM) data for specified bounding boxes
 and natural features, processes it, and outputs Mapbox Vector Tiles (MBTiles) and 
-MapLibre GL JS-compatible style JSON files using AI assistance.
+MapLibre GL JS-compatible style JSON files with smart caching and optimized processing.
 """
 
 __version__ = "0.1.0"

@@ -138,13 +138,14 @@ class OutputConfig(BaseModel):
                 dir_path.mkdir(parents=True, exist_ok=True)
 
 
+# Legacy configuration class - will be removed in future version
 class AIConfig(BaseModel):
-    """AI service configuration."""
-    provider: str = Field(default="openai", description="AI provider (openai, anthropic)")
-    model: str = Field(default="gpt-4", description="Model name")
-    api_key: Optional[str] = Field(default=None, description="API key")
-    max_tokens: int = Field(default=2000, description="Maximum tokens per request")
-    temperature: float = Field(default=0.3, ge=0, le=2, description="Generation temperature")
+    """Legacy AI configuration - deprecated."""
+    provider: str = Field(default="openai", description="Legacy AI provider setting")
+    model: str = Field(default="gpt-4", description="Legacy model name")
+    api_key: Optional[str] = Field(default=None, description="Legacy API key")
+    max_tokens: int = Field(default=2000, description="Legacy max tokens")
+    temperature: float = Field(default=0.3, ge=0, le=2, description="Legacy temperature")
 
 
 class TileConfig(BaseModel):
@@ -295,7 +296,7 @@ class TilecraftConfig(BaseSettings):
     features: FeatureConfig
     palette: PaletteConfig
     output: OutputConfig = Field(default_factory=OutputConfig)
-    ai: AIConfig = Field(default_factory=AIConfig)
+    # ai: AIConfig = Field(default_factory=AIConfig)  # Deprecated - will be removed
     tiles: TileConfig = Field(default_factory=TileConfig)
     
     # Processing options

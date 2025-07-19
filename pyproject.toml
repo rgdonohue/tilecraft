@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tilecraft"
 version = "0.1.0"
-description = "AI-Assisted CLI Tool for Vector Tile Generation from OSM"
+description = "Streamlined CLI for OSM Vector Tile Generation"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
@@ -46,9 +46,9 @@ dependencies = [
     "httpx>=0.24.0",
     "aiofiles>=23.0.0",
     
-    # AI integration
-    "openai>=1.0.0",
-    "anthropic>=0.18.0",
+    # Legacy AI dependencies - will be removed in future version
+    # "openai>=1.0.0",
+    # "anthropic>=0.18.0",
     
     # Data processing
     "geojson>=3.0.0",
