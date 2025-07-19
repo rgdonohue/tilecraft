@@ -174,8 +174,24 @@ def main(
 
         if preview:
             console.print("\n[bold blue]Generating preview...[/bold blue]")
-            # TODO: Implement preview generation
-            console.print("[yellow]Preview generation not yet implemented[/yellow]")
+            try:
+                from tilecraft.utils.preview import PreviewGenerator
+                
+                preview_generator = PreviewGenerator(config.output.base_dir / "preview")
+                preview_path = preview_generator.generate_html_preview(
+                    result["tiles"], result["style"], config.bbox
+                )
+                
+                console.print(f"[green]✓ Preview generated: {preview_path}[/green]")
+                console.print(f"[blue]To view preview:[/blue]")
+                console.print(f"[blue]1. cd {preview_path.parent}[/blue]")
+                console.print(f"[blue]2. python start_tile_server.py[/blue]")
+                console.print(f"[blue]3. Open http://localhost:8080[/blue]")
+                
+            except Exception as e:
+                console.print(f"[red]Preview generation failed: {e}[/red]")
+                if verbose:
+                    console.print_exception()
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user[/yellow]")
