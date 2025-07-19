@@ -3,10 +3,11 @@ Pytest configuration and fixtures for Tilecraft tests.
 """
 
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 import pytest
+
 from tilecraft.models.config import (
     AIConfig,
     BoundingBox,
@@ -44,8 +45,12 @@ def sample_palette() -> PaletteConfig:
 
 
 @pytest.fixture
-def sample_config(temp_dir: Path, sample_bbox: BoundingBox, 
-                  sample_features: FeatureConfig, sample_palette: PaletteConfig) -> TilecraftConfig:
+def sample_config(
+    temp_dir: Path,
+    sample_bbox: BoundingBox,
+    sample_features: FeatureConfig,
+    sample_palette: PaletteConfig,
+) -> TilecraftConfig:
     """Provide a complete test configuration."""
     return TilecraftConfig(
         bbox=sample_bbox,
@@ -87,15 +92,10 @@ def mock_ai_response() -> dict:
                     "max_zoom": 14,
                     "attributes": [
                         {"name": "name", "type": "string"},
-                        {"name": "waterway", "type": "string"}
-                    ]
+                        {"name": "waterway", "type": "string"},
+                    ],
                 }
-            ]
+            ],
         },
-        "style": {
-            "version": 8,
-            "name": "test_style",
-            "sources": {},
-            "layers": []
-        }
-    } 
+        "style": {"version": 8, "name": "test_style", "sources": {}, "layers": []},
+    }

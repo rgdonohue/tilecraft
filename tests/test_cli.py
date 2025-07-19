@@ -15,7 +15,7 @@ class TestCLI:
     def test_help_command(self):
         """Test that help command works."""
         runner = CliRunner()
-        result = runner.invoke(main, ['--help'])
+        result = runner.invoke(main, ["--help"])
         assert result.exit_code == 0
         assert "Tilecraft" in result.output
         assert "--bbox" in result.output
@@ -25,7 +25,7 @@ class TestCLI:
     def test_version_command(self):
         """Test version command."""
         runner = CliRunner()
-        result = runner.invoke(main, ['--version'])
+        result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
         assert "0.1.0" in result.output
 
@@ -39,22 +39,26 @@ class TestCLI:
     def test_invalid_bbox(self):
         """Test validation of invalid bounding box."""
         runner = CliRunner()
-        result = runner.invoke(main, [
-            '--bbox', 'invalid',
-            '--features', 'rivers',
-            '--palette', 'test'
-        ])
+        result = runner.invoke(
+            main, ["--bbox", "invalid", "--features", "rivers", "--palette", "test"]
+        )
         assert result.exit_code != 0
         assert "Invalid bounding box" in result.output
 
     def test_invalid_bbox_order(self):
         """Test validation of bbox coordinate order."""
         runner = CliRunner()
-        result = runner.invoke(main, [
-            '--bbox', '-105.0,40.0,-105.5,39.5',  # Invalid order
-            '--features', 'rivers', 
-            '--palette', 'test'
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "--bbox",
+                "-105.0,40.0,-105.5,39.5",  # Invalid order
+                "--features",
+                "rivers",
+                "--palette",
+                "test",
+            ],
+        )
         assert result.exit_code != 0
 
     def test_valid_bbox_parsing(self):
@@ -69,23 +73,37 @@ class TestCLI:
     def test_invalid_features(self):
         """Test validation of invalid feature types."""
         runner = CliRunner()
-        result = runner.invoke(main, [
-            '--bbox', '-105.5,39.5,-105.0,40.0',
-            '--features', 'invalid_feature',
-            '--palette', 'test'
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "--bbox",
+                "-105.5,39.5,-105.0,40.0",
+                "--features",
+                "invalid_feature",
+                "--palette",
+                "test",
+            ],
+        )
         assert result.exit_code != 0
 
     def test_zoom_level_validation(self):
         """Test zoom level validation."""
         runner = CliRunner()
-        result = runner.invoke(main, [
-            '--bbox', '-105.5,39.5,-105.0,40.0',
-            '--features', 'rivers',
-            '--palette', 'test',
-            '--min-zoom', '10',
-            '--max-zoom', '5'  # Invalid: max < min
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "--bbox",
+                "-105.5,39.5,-105.0,40.0",
+                "--features",
+                "rivers",
+                "--palette",
+                "test",
+                "--min-zoom",
+                "10",
+                "--max-zoom",
+                "5",  # Invalid: max < min
+            ],
+        )
         assert result.exit_code != 0
         assert "Maximum zoom must be >= minimum zoom" in result.output
 
@@ -93,4 +111,4 @@ class TestCLI:
     def test_full_command_structure(self, tmp_path):
         """Test full command with all options (without actual processing)."""
         # This would require mocking the pipeline
-        pass 
+        pass

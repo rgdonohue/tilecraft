@@ -2,28 +2,29 @@
 Prompt templates for AI integration.
 """
 
-from typing import List, Dict, Any
 
 from tilecraft.models.config import FeatureType, PaletteConfig
 
 
 class PromptTemplates:
     """Templates for AI prompts used in Tilecraft."""
-    
+
     @staticmethod
-    def schema_generation_prompt(feature_types: List[FeatureType], bbox_info: str) -> str:
+    def schema_generation_prompt(
+        feature_types: list[FeatureType], bbox_info: str
+    ) -> str:
         """
         Generate prompt for tile schema generation.
-        
+
         Args:
             feature_types: List of feature types
             bbox_info: Bounding box description
-            
+
         Returns:
             Schema generation prompt
         """
         feature_list = ", ".join([f.value for f in feature_types])
-        
+
         return f"""Generate a vector tile schema for the following OpenStreetMap feature types: {feature_list}.
 
 This schema will be used to generate vector tiles for a geographic region: {bbox_info}.
@@ -46,20 +47,22 @@ Format the response as a structured JSON schema compatible with tippecanoe vecto
 Focus on cartographic clarity and performance optimization for web mapping applications."""
 
     @staticmethod
-    def style_generation_prompt(feature_types: List[FeatureType], palette: PaletteConfig, region_context: str) -> str:
+    def style_generation_prompt(
+        feature_types: list[FeatureType], palette: PaletteConfig, region_context: str
+    ) -> str:
         """
         Generate prompt for MapLibre style generation.
-        
+
         Args:
             feature_types: List of feature types
             palette: Palette configuration
             region_context: Geographic context
-            
+
         Returns:
             Style generation prompt
         """
         feature_list = ", ".join([f.value for f in feature_types])
-        
+
         base_prompt = f"""Generate a MapLibre GL JS style JSON for vector tiles representing {feature_list} in {region_context} using a '{palette.name}' palette.
 
 Style Requirements:
@@ -80,18 +83,20 @@ Feature-specific styling guidelines:"""
             FeatureType.LAKES: "Lakes should be distinguished from other water with deeper tones",
             FeatureType.PARKS: "Parks should feel inviting with lighter, more vibrant greens",
             FeatureType.ROADS: "Roads should be subtle but clearly defined hierarchy",
-            FeatureType.BUILDINGS: "Buildings should have consistent styling with appropriate shadows"
+            FeatureType.BUILDINGS: "Buildings should have consistent styling with appropriate shadows",
         }
-        
+
         for feature_type in feature_types:
             if feature_type in guidelines:
-                base_prompt += f"\n- {feature_type.value.title()}: {guidelines[feature_type]}"
-        
+                base_prompt += (
+                    f"\n- {feature_type.value.title()}: {guidelines[feature_type]}"
+                )
+
         base_prompt += f"""
 
 Palette mood interpretation for '{palette.name}':
 """
-        
+
         # Add palette-specific guidance
         palette_guidance = {
             "subalpine dusk": "Cool mountain colors with muted blues, greens, and purples. Evening atmosphere with subtle gradients.",
@@ -99,12 +104,15 @@ Palette mood interpretation for '{palette.name}':
             "pacific northwest": "Deep forest greens, ocean blues, and misty grays. Emphasize natural, organic feel.",
             "urban midnight": "High contrast dark theme with bright accent colors. Modern, tech-forward aesthetic.",
             "arctic": "Cool blues and whites with ice-like clarity. Minimal, clean design.",
-            "tropical": "Vibrant greens and blues with high saturation. Lush, energetic feel."
+            "tropical": "Vibrant greens and blues with high saturation. Lush, energetic feel.",
         }
-        
-        guidance = palette_guidance.get(palette.name.lower(), "Interpret the palette name to create an appropriate mood and color scheme.")
+
+        guidance = palette_guidance.get(
+            palette.name.lower(),
+            "Interpret the palette name to create an appropriate mood and color scheme.",
+        )
         base_prompt += guidance
-        
+
         base_prompt += """
 
 Output a complete MapLibre GL JS style JSON that includes:
@@ -123,17 +131,17 @@ Ensure the style is production-ready and follows MapLibre GL JS best practices."
     def tag_disambiguation_prompt(feature_type: FeatureType) -> str:
         """
         Generate prompt for OSM tag disambiguation.
-        
+
         Args:
             feature_type: Feature type to disambiguate
-            
+
         Returns:
             Tag disambiguation prompt
         """
         return f"""Given the feature type '{feature_type.value}', identify all relevant OpenStreetMap tags including:
 
 1. Primary tags (most common and standard)
-2. Synonyms and variations 
+2. Synonyms and variations
 3. Regional variants
 4. Common misspellings or alternative spellings
 5. Related tags that might overlap
@@ -158,11 +166,11 @@ Focus on maximizing feature capture while minimizing false positives."""
     def validation_prompt(generated_content: str, content_type: str) -> str:
         """
         Generate prompt for validating AI-generated content.
-        
+
         Args:
             generated_content: Content to validate
             content_type: Type of content (schema, style, tags)
-            
+
         Returns:
             Validation prompt
         """
@@ -189,11 +197,11 @@ Focus on practical usability for web mapping applications and adherence to indus
     def error_analysis_prompt(error_message: str, context: str) -> str:
         """
         Generate prompt for AI-assisted error analysis.
-        
+
         Args:
             error_message: Error message to analyze
             context: Context where error occurred
-            
+
         Returns:
             Error analysis prompt
         """
@@ -208,4 +216,4 @@ Please provide:
 4. Related issues that might arise
 5. Code suggestions if applicable
 
-Focus on practical solutions that can be implemented immediately and long-term improvements to prevent similar issues.""" 
+Focus on practical solutions that can be implemented immediately and long-term improvements to prevent similar issues."""
