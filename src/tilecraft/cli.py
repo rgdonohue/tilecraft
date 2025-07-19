@@ -61,7 +61,18 @@ def validate_features(ctx, param, value):
         raise click.BadParameter(f"Invalid feature types: {e}")
 
 
-@click.command()
+@click.group(invoke_without_command=True)
+@click.pass_context
+@click.version_option(version=__version__)
+def cli(ctx):
+    """Tilecraft: Streamlined CLI for OSM Vector Tile Generation"""
+    if ctx.invoked_subcommand is None:
+        # Default behavior - show help
+        click.echo(ctx.get_help())
+
+
+@cli.command("generate")
+@click.pass_context
 @click.option(
     "--bbox",
     required=True,
@@ -106,8 +117,8 @@ def validate_features(ctx, param, value):
 @click.option("--preview", is_flag=True, help="Generate preview after tile creation")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
 @click.option("--quiet", "-q", is_flag=True, help="Quiet mode (minimal output)")
-@click.version_option(version=__version__)
-def main(
+def generate(
+    ctx,
     bbox: BoundingBox,
     features: FeatureConfig,
     palette: str,
@@ -131,6 +142,17 @@ def main(
     """
     if not quiet:
         print_banner()
+
+    # Quick dependency check before starting
+    from tilecraft.utils.system_check import verify_system_dependencies
+    if not verify_system_dependencies(verbose=False):
+        console.print("[red]❌ Critical dependencies missing![/red]")
+        console.print("Run '[cyan]tilecraft check --fix[/cyan]' for installation instructions")
+        console.print("Or continue anyway with missing dependencies...")
+        
+        if not click.confirm("Continue despite missing dependencies?", default=False):
+            console.print("[yellow]Aborted. Install dependencies and try again.[/yellow]")
+            sys.exit(1)
 
     # Validate zoom levels
     if max_zoom < min_zoom:
@@ -286,6 +308,80 @@ Files generated:
         border_style="green",
     )
     console.print(panel)
+
+
+@cli.command("check")
+@click.option("--verbose", "-v", is_flag=True, help="Show detailed dependency information")
+@click.option("--fix", is_flag=True, help="Show installation commands for missing dependencies")
+def check_system(verbose: bool, fix: bool):
+    """Check system dependencies and installation."""
+    from tilecraft.utils.system_check import SystemVerifier
+    
+    console.print("🔍 [bold blue]Checking Tilecraft Dependencies[/bold blue]\n")
+    
+    verifier = SystemVerifier()
+    verifier.verify_all_dependencies()
+    
+    # Create results table
+    table = Table(title="System Dependencies")
+    table.add_column("Dependency", style="bold")
+    table.add_column("Status", justify="center")
+    table.add_column("Version")
+    if verbose:
+        table.add_column("Path")
+    
+    for name, result in verifier.results.items():
+        status = "✅ Available" if result.available else "❌ Missing"
+        status_style = "green" if result.available else "red"
+        version = result.version or "unknown"
+        
+        row = [name, f"[{status_style}]{status}[/{status_style}]", version]
+        if verbose:
+            row.append(result.path or "N/A")
+        
+        table.add_row(*row)
+    
+    console.print(table)
+    
+    # Show summary
+    summary = verifier.get_summary()
+    
+    if summary["all_available"]:
+        console.print("\n🎉 [bold green]All dependencies are available![/bold green]")
+        console.print("✅ Tilecraft is ready to use.")
+    else:
+        console.print(f"\n⚠️  [yellow]{summary['missing_dependencies']} dependencies missing[/yellow]")
+        
+        if summary["critical_missing"]:
+            console.print(f"🚨 [red]Critical missing: {', '.join(summary['critical_missing'])}[/red]")
+            console.print("❌ Tilecraft will not function without these dependencies.")
+        
+        # Show installation help
+        if fix:
+            console.print("\n📋 [bold]Installation Instructions:[/bold]")
+            for name, result in verifier.results.items():
+                if not result.available and result.installation_help:
+                    console.print(f"\n[bold]{name}:[/bold]")
+                    console.print(result.installation_help)
+    
+    # Show errors if verbose
+    if verbose:
+        errors = [(name, result.error) for name, result in verifier.results.items() 
+                 if not result.available and result.error]
+        if errors:
+            console.print("\n🐛 [bold red]Error Details:[/bold red]")
+            for name, error in errors:
+                console.print(f"• [red]{name}[/red]: {error}")
+    
+    # Exit with error code if critical dependencies missing
+    if summary["critical_missing"]:
+        console.print("\n💡 [yellow]Run 'tilecraft check --fix' for installation instructions[/yellow]")
+        sys.exit(1)
+
+
+def main():
+    """Main entry point for CLI."""
+    cli()
 
 
 if __name__ == "__main__":
