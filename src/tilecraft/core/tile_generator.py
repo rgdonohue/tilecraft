@@ -407,7 +407,7 @@ class TileGenerator:
                     temp_output.unlink()
                 raise e
     
-    def _build_tippecanoe_command(self, feature_files: Dict[str, Path], output_path: Path, attempt: int) -> List[str]:
+    def _build_tippecanoe_command(self, feature_files: Dict[str, Path], output_path: Path, attempt: int = 0) -> List[str]:
         """
         Build tippecanoe command with all options and optimizations.
         
@@ -439,9 +439,14 @@ class TileGenerator:
             f'--buffer={self.config.tiles.buffer}',
         ])
         
-        # Feature optimization
+        # Feature optimization (adjust for retry attempts)
+        drop_rate = self.config.tiles.drop_rate
+        if attempt > 0:
+            # Be more aggressive with feature dropping on retries
+            drop_rate = min(drop_rate * (1.5 ** attempt), 10.0)
+        
         cmd.extend([
-            f'--drop-rate={self.config.tiles.drop_rate}',
+            f'--drop-rate={drop_rate}',
             '--no-feature-limit',  # Allow more features per tile
             '--drop-densest-as-needed',  # Adaptive feature dropping
         ])
@@ -454,9 +459,9 @@ class TileGenerator:
         if hasattr(self.config.tiles, 'simplification_at_max_zoom') and self.config.tiles.simplification_at_max_zoom:
             cmd.append(f'--simplification-at-maximum-zoom={self.config.tiles.simplification_at_max_zoom}')
         
-        # Add input files without per-layer zoom settings since those arguments don't exist
+        # Add input files with layer naming
         for feature_type, geojson_path in feature_files.items():
-            # Use the basic -L layer naming syntax that actually exists
+            # Use the -L layer naming syntax
             cmd.extend(['-L', f'{feature_type}:{geojson_path}'])
         
         # Output options
@@ -861,21 +866,41 @@ class TileGenerator:
                 cursor.execute("SELECT name, value FROM metadata")
                 info['metadata'] = dict(cursor.fetchall())
                 
-                # Get tile statistics
-                cursor.execute("SELECT COUNT(*) FROM tiles")
-                info['tile_count'] = cursor.fetchone()[0]
+                # Check which table format we have
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = {row[0] for row in cursor.fetchall()}
                 
-                cursor.execute("SELECT MIN(zoom_level), MAX(zoom_level) FROM tiles")
-                min_zoom, max_zoom = cursor.fetchone()
-                info['zoom_range'] = {'min': min_zoom, 'max': max_zoom}
-                
-                # Get tiles per zoom level
-                cursor.execute("SELECT zoom_level, COUNT(*) FROM tiles GROUP BY zoom_level ORDER BY zoom_level")
-                info['tiles_per_zoom'] = dict(cursor.fetchall())
-                
-                # Get tile size statistics
-                cursor.execute("SELECT AVG(LENGTH(tile_data)), MIN(LENGTH(tile_data)), MAX(LENGTH(tile_data)) FROM tiles")
-                avg_size, min_size, max_size = cursor.fetchone()
+                # Get tile statistics (handle both table formats)
+                if 'tiles' in tables:
+                    # Old format
+                    cursor.execute("SELECT COUNT(*) FROM tiles")
+                    info['tile_count'] = cursor.fetchone()[0]
+                    
+                    cursor.execute("SELECT MIN(zoom_level), MAX(zoom_level) FROM tiles")
+                    min_zoom, max_zoom = cursor.fetchone()
+                    info['zoom_range'] = {'min': min_zoom, 'max': max_zoom}
+                    
+                    cursor.execute("SELECT zoom_level, COUNT(*) FROM tiles GROUP BY zoom_level ORDER BY zoom_level")
+                    info['tiles_per_zoom'] = dict(cursor.fetchall())
+                    
+                    cursor.execute("SELECT AVG(LENGTH(tile_data)), MIN(LENGTH(tile_data)), MAX(LENGTH(tile_data)) FROM tiles")
+                    avg_size, min_size, max_size = cursor.fetchone()
+                elif 'map' in tables and 'images' in tables:
+                    # New format  
+                    cursor.execute("SELECT COUNT(*) FROM map")
+                    info['tile_count'] = cursor.fetchone()[0]
+                    
+                    cursor.execute("SELECT MIN(zoom_level), MAX(zoom_level) FROM map")
+                    min_zoom, max_zoom = cursor.fetchone()
+                    info['zoom_range'] = {'min': min_zoom, 'max': max_zoom}
+                    
+                    cursor.execute("SELECT zoom_level, COUNT(*) FROM map GROUP BY zoom_level ORDER BY zoom_level")
+                    info['tiles_per_zoom'] = dict(cursor.fetchall())
+                    
+                    cursor.execute("SELECT AVG(LENGTH(tile_data)), MIN(LENGTH(tile_data)), MAX(LENGTH(tile_data)) FROM images")
+                    avg_size, min_size, max_size = cursor.fetchone()
+                else:
+                    raise ValueError("No valid tile table format found")
                 info['tile_sizes'] = {
                     'average_bytes': int(avg_size) if avg_size else 0,
                     'min_bytes': min_size or 0,

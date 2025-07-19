@@ -210,14 +210,15 @@ class TestTileGenerator:
     def test_validate_input_files_success(self, tile_generator, sample_geojson_files):
         """Test successful input file validation."""
         # Should not raise exception
-        tile_generator._validate_input_files(sample_geojson_files)
+        result = tile_generator._validate_and_filter_input_files(sample_geojson_files)
+        assert len(result) == 2
     
     def test_validate_input_files_missing_file(self, tile_generator, temp_dir):
         """Test validation with missing input file."""
         feature_files = {"rivers": temp_dir / "nonexistent.geojson"}
         
         with pytest.raises(TileGenerationError, match="Feature file not found"):
-            tile_generator._validate_input_files(feature_files)
+            tile_generator._validate_and_filter_input_files(feature_files)
     
     def test_validate_input_files_empty_file(self, tile_generator, temp_dir):
         """Test validation with empty input file."""
@@ -226,8 +227,9 @@ class TestTileGenerator:
         
         feature_files = {"rivers": empty_file}
         
-        # Should not raise exception, but log warning
-        tile_generator._validate_input_files(feature_files)
+        # Should filter out empty files
+        result = tile_generator._validate_and_filter_input_files(feature_files)
+        assert len(result) == 0
     
     def test_validate_input_files_invalid_json(self, tile_generator, temp_dir):
         """Test validation with invalid JSON file."""
@@ -238,7 +240,17 @@ class TestTileGenerator:
         feature_files = {"rivers": invalid_file}
         
         with pytest.raises(TileGenerationError, match="Invalid GeoJSON file"):
-            tile_generator._validate_input_files(feature_files)
+            tile_generator._validate_and_filter_input_files(feature_files)
+    
+    def test_validate_input_files_no_valid_files(self, tile_generator, temp_dir):
+        """Test validation with no valid files."""
+        empty_file = temp_dir / "empty.geojson"
+        empty_file.touch()
+        
+        feature_files = {"rivers": empty_file}
+        
+        with pytest.raises(TileGenerationError, match="No valid feature files"):
+            tile_generator._validate_and_filter_input_files(feature_files)
     
     def test_generate_cache_key(self, tile_generator, sample_geojson_files):
         """Test cache key generation."""
@@ -277,10 +289,11 @@ class TestTileGenerator:
         assert str(output_path) in cmd
         
         # Check layer specifications
-        assert '--layer=rivers' in cmd
-        assert '--layer=forest' in cmd
-        assert str(sample_geojson_files["rivers"]) in cmd
-        assert str(sample_geojson_files["forest"]) in cmd
+        assert '-L' in cmd
+        # Check that layer specifications are present
+        layer_specs = [cmd[i+1] for i, arg in enumerate(cmd) if arg == '-L']
+        assert any('rivers:' in spec for spec in layer_specs)
+        assert any('forest:' in spec for spec in layer_specs)
     
     def test_build_tippecanoe_command_with_bbox(self, tile_generator, sample_geojson_files, temp_dir):
         """Test tippecanoe command building with bounding box."""
@@ -296,7 +309,7 @@ class TestTileGenerator:
         output_path = temp_dir / "output.mbtiles"
         cmd = tile_generator._build_tippecanoe_command(sample_geojson_files, output_path, 1)
         
-        # Should have more conservative settings for retries
+        # Should have more aggressive feature dropping for retries
         drop_rate_args = [arg for arg in cmd if arg.startswith('--drop-rate=')]
         assert len(drop_rate_args) == 1
         
