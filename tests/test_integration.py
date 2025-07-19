@@ -31,7 +31,7 @@ def test_config(temp_dir):
         features=FeatureConfig(types=[FeatureType.RIVERS, FeatureType.FOREST]),
         palette=PaletteConfig(name="test_palette"),
         output=OutputConfig(base_dir=temp_dir / "output"),
-        tiles=TileConfig(min_zoom=8, max_zoom=12),
+        tiles=TileConfig(min_zoom=8, max_zoom=14, base_zoom=14),
         _env_file=None  # Disable environment file loading for tests
     )
 

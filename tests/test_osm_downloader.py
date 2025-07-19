@@ -211,8 +211,18 @@ class TestDownloadWithProgress:
         mock_progress = Mock()
         task_id = 1
         
+        # Create a proper async context manager
+        from contextlib import asynccontextmanager
+        
+        @asynccontextmanager
+        async def mock_stream_manager(*args, **kwargs):
+            yield mock_response
+
         with patch('httpx.AsyncClient') as mock_client:
-            mock_client.return_value.__aenter__.return_value.stream.return_value.__aenter__.return_value = mock_response
+            # Set up async context manager properly  
+            mock_client_instance = AsyncMock()
+            mock_client.return_value = mock_client_instance
+            mock_client_instance.stream = mock_stream_manager
             
             await downloader._download_with_progress(query, output_path, mock_progress, task_id)
             
@@ -233,8 +243,18 @@ class TestDownloadWithProgress:
         mock_progress = Mock()
         task_id = 1
         
+        # Create a proper async context manager
+        from contextlib import asynccontextmanager
+        
+        @asynccontextmanager
+        async def mock_stream_manager(*args, **kwargs):
+            yield mock_response
+
         with patch('httpx.AsyncClient') as mock_client:
-            mock_client.return_value.__aenter__.return_value.stream.return_value.__aenter__.return_value = mock_response
+            # Set up async context manager properly
+            mock_client_instance = AsyncMock()
+            mock_client.return_value = mock_client_instance
+            mock_client_instance.stream = mock_stream_manager
             
             with pytest.raises(RateLimitError):
                 await downloader._download_with_progress(query, output_path, mock_progress, task_id)
@@ -248,7 +268,10 @@ class TestDownloadWithProgress:
         task_id = 1
         
         with patch('httpx.AsyncClient') as mock_client:
-            mock_client.return_value.__aenter__.return_value.stream.side_effect = httpx.TimeoutException("Timeout")
+            # Set up async context manager properly
+            mock_client_instance = AsyncMock()
+            mock_client.return_value = mock_client_instance
+            mock_client_instance.stream.side_effect = httpx.TimeoutException("Timeout")
             
             with pytest.raises(TimeoutError):
                 await downloader._download_with_progress(query, output_path, mock_progress, task_id)
