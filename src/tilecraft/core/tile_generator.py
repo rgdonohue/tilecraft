@@ -574,7 +574,26 @@ class TileGenerator:
         logger.info(f"Executing tippecanoe command: {' '.join(cmd)}")
         progress.update(task_id, description="Starting tippecanoe...")
 
+        process = None
         try:
+            # Verify tippecanoe executable exists and is accessible
+            tippecanoe_path = cmd[0]
+            import shutil
+            if not shutil.which(tippecanoe_path):
+                raise TippecanoeError(
+                    f"Tippecanoe executable not found: {tippecanoe_path}. "
+                    "Please ensure tippecanoe is installed and in PATH. "
+                    "Install from: https://github.com/felt/tippecanoe#installation"
+                )
+            
+            # Check if tippecanoe is executable
+            import os
+            tippecanoe_full_path = shutil.which(tippecanoe_path)
+            if not os.access(tippecanoe_full_path, os.X_OK):
+                raise TippecanoeError(
+                    f"Tippecanoe executable is not executable: {tippecanoe_full_path}"
+                )
+            
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -582,6 +601,8 @@ class TileGenerator:
                 text=True,
                 bufsize=1,
                 universal_newlines=True,
+                # Add security constraints
+                preexec_fn=None if os.name == 'nt' else os.setsid,  # Create new process group on Unix
             )
 
             output_lines = []
@@ -631,17 +652,64 @@ class TileGenerator:
             logger.info("Tippecanoe completed successfully")
             return result
 
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             if process:
-                process.kill()
+                try:
+                    # Try graceful termination first
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5.0)  # Wait up to 5 seconds
+                    except subprocess.TimeoutExpired:
+                        # Force kill if graceful termination failed
+                        process.kill()
+                        process.wait()
+                except Exception:
+                    pass
             raise TippecanoeError(
-                f"Tippecanoe timed out after {self.DEFAULT_TIMEOUT} seconds"
+                f"Tippecanoe timed out after {self.DEFAULT_TIMEOUT} seconds. "
+                "This usually indicates insufficient memory or very large datasets. "
+                "Try reducing the dataset size or increasing available memory."
+            )
+        except PermissionError as e:
+            raise TippecanoeError(
+                f"Permission denied executing tippecanoe: {e}. "
+                "Check that tippecanoe is executable and you have necessary permissions."
+            )
+        except FileNotFoundError as e:
+            raise TippecanoeError(
+                f"Tippecanoe executable not found: {e}. "
+                "Please install tippecanoe: https://github.com/felt/tippecanoe#installation"
+            )
+        except OSError as e:
+            raise TippecanoeError(
+                f"System error executing tippecanoe: {e}. "
+                "This may indicate memory exhaustion or system resource limits."
             )
         except Exception as e:
             if process:
-                process.kill()
-            logger.error(f"Exception during tippecanoe execution: {e}")
-            raise TippecanoeError(f"Error executing tippecanoe: {e}")
+                try:
+                    process.terminate()
+                    process.wait(timeout=5.0)
+                except Exception:
+                    try:
+                        process.kill()
+                        process.wait()
+                    except Exception:
+                        pass
+            logger.error(f"Unexpected error during tippecanoe execution: {e}")
+            raise TippecanoeError(f"Unexpected error executing tippecanoe: {e}")
+        finally:
+            # Ensure process is cleaned up
+            if process and process.poll() is None:
+                try:
+                    process.terminate()
+                    process.wait(timeout=2.0)
+                except Exception:
+                    try:
+                        process.kill()
+                        process.wait()
+                    except Exception:
+                        pass
 
     def _parse_tippecanoe_progress(self, line: str) -> str:
         """Parse tippecanoe output for progress information."""
@@ -703,9 +771,17 @@ class TileGenerator:
                     if memory_pct > 95:  # Critical memory usage
                         raise MemoryError(f"Critical memory usage: {memory_pct:.1f}%")
 
-        except Exception:
-            # Memory monitoring should not crash the main process
-            pass
+        except KeyboardInterrupt:
+            # Allow graceful shutdown
+            logger.debug("Memory monitoring interrupted by user")
+            return
+        except MemoryError:
+            # Re-raise memory errors - these are important
+            raise
+        except Exception as e:
+            # Log other errors but don't crash the main process
+            logger.debug(f"Memory monitoring error (non-critical): {e}")
+            return
 
     def _cleanup_memory(self) -> None:
         """Attempt to free memory before retry."""
@@ -751,8 +827,16 @@ class TileGenerator:
                     f"File exists: {output_path.exists()}, size: {output_path.stat().st_size if output_path.exists() else 'N/A'}"
                 )
 
-                # Validate SQLite database structure
-                with sqlite3.connect(output_path) as conn:
+                # Validate SQLite database structure with enhanced error handling
+                conn = None
+                try:
+                    # Check if database is locked or corrupted
+                    conn = sqlite3.connect(
+                        output_path, 
+                        timeout=30.0,  # 30 second timeout for locked databases
+                        check_same_thread=False
+                    )
+                    conn.execute("PRAGMA integrity_check")  # Check for corruption
                     cursor = conn.cursor()
 
                     # Check required tables
@@ -893,7 +977,23 @@ class TileGenerator:
                     logger.info(
                         f"Generated {tile_count} tiles, zoom levels {min_zoom}-{max_zoom}"
                     )
-                    return  # Success - exit retry loop
+                    
+                except sqlite3.DatabaseError as e:
+                    raise ValidationError(f"Database is corrupted or invalid: {e}")
+                except sqlite3.OperationalError as e:
+                    if "database is locked" in str(e).lower():
+                        raise ValidationError(f"Database is locked (another process may be using it): {e}")
+                    else:
+                        raise ValidationError(f"Database operational error: {e}")
+                finally:
+                    # Ensure database connection is properly closed
+                    if conn:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                
+                return  # Success - exit retry loop
 
             except sqlite3.Error as e:
                 if attempt < max_validation_retries - 1:

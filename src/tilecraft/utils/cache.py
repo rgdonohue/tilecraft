@@ -118,11 +118,54 @@ class CacheManager:
 
         # Copy or move file to cache
         if source_path != cache_path:
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            import shutil
+            try:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                import shutil
+                import os
 
-            shutil.copy2(source_path, cache_path)
-            logger.debug(f"Cached: {cache_path}")
+                # Check if source file exists and is readable
+                if not source_path.exists():
+                    raise FileNotFoundError(f"Source file not found: {source_path}")
+                
+                if not os.access(source_path, os.R_OK):
+                    raise PermissionError(f"Cannot read source file: {source_path}")
+
+                # Check available disk space (estimate 2x source file size needed)
+                source_size = source_path.stat().st_size
+                available_space = shutil.disk_usage(cache_path.parent).free
+                
+                if available_space < source_size * 2:
+                    raise OSError(
+                        f"Insufficient disk space. Available: {available_space // 1024 // 1024}MB, "
+                        f"Required: {source_size * 2 // 1024 // 1024}MB"
+                    )
+
+                # Check write permissions on cache directory
+                if not os.access(cache_path.parent, os.W_OK):
+                    raise PermissionError(f"Cannot write to cache directory: {cache_path.parent}")
+
+                # Perform atomic copy operation
+                temp_cache_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
+                try:
+                    shutil.copy2(source_path, temp_cache_path)
+                    temp_cache_path.rename(cache_path)
+                    logger.debug(f"Cached: {cache_path}")
+                except Exception:
+                    # Cleanup temporary file on failure
+                    if temp_cache_path.exists():
+                        try:
+                            temp_cache_path.unlink()
+                        except Exception:
+                            pass
+                    raise
+                    
+            except (OSError, PermissionError, FileNotFoundError) as e:
+                logger.error(f"Failed to cache file {source_path}: {e}")
+                # Return source path if caching fails - allow operation to continue
+                return source_path
+            except Exception as e:
+                logger.error(f"Unexpected error caching file {source_path}: {e}")
+                return source_path
 
         return cache_path
 
@@ -232,7 +275,18 @@ class CacheManager:
 
         total_size = 0
         for file_path in self.cache_dir.rglob("*"):
-            if file_path.is_file():
-                total_size += file_path.stat().st_size
+            try:
+                if file_path.is_file():
+                    # Use lstat to avoid following symlinks and handle race conditions
+                    stat_info = file_path.lstat()
+                    if stat_info.st_nlink > 0:  # File still exists
+                        total_size += stat_info.st_size
+            except (OSError, FileNotFoundError):
+                # File may have been deleted between iteration and stat call
+                # Skip and continue with next file
+                continue
+            except Exception as e:
+                logger.warning(f"Error getting size of {file_path}: {e}")
+                continue
 
         return total_size
