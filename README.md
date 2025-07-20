@@ -9,12 +9,13 @@ Generate beautiful vector tiles and MapLibre GL JS styles from OpenStreetMap dat
 
 ## ✨ Features
 
-- 🗺️ **OSM Integration**: Direct OpenStreetMap data processing with intelligent tag handling
+- 🗺️ **OSM Integration**: Direct OpenStreetMap data processing with intelligent tag handling  
 - 🎨 **Beautiful Styles**: Palette-based MapLibre GL JS style generation
 - ⚡ **Smart Caching**: Avoid redundant processing with intelligent cache management
 - 🚀 **High Performance**: Optimized processing with parallel feature extraction
 - 🛠️ **Professional Tools**: Built on industry-standard tools (osmium, tippecanoe)
 - 📦 **Production Ready**: MBTiles output compatible with all major mapping platforms
+- 🗂️ **50+ Feature Types**: Comprehensive OSM feature support across 9 categories
 
 ## 🚀 Quick Start
 
@@ -40,45 +41,44 @@ source .venv/bin/activate
 
 # Install tilecraft
 pip install -e .
-
-# Set up environment
-cp .env.example .env
-# Edit .env to add your API keys
 ```
 
 ### Basic Usage
 
 ```bash
 # Generate tiles for Colorado rivers and forests
-tilecraft \
+tilecraft generate \
   --bbox "-109.2,36.8,-106.8,38.5" \
   --features "rivers,forest,water" \
-  --palette "subalpine dusk"
+  --palette "subalpine dusk" \
+  --name "colorado_nature"
 
 # Quick urban mapping
-tilecraft \
+tilecraft generate \
   --bbox "-122.5,37.7,-122.3,37.8" \
-  --features "roads,buildings,parks" \
-  --palette "urban midnight"
+  --features "roads,buildings,parks,restaurants" \
+  --palette "urban midnight" \
+  --name "san_francisco"
 
-
-**Historic Downtown**
-tilecraft \
-  --bbox "-106.81,37.36,-104.49,38.39" \
-  --features "roads,buildings,parks" \
-  --palette "urban midnight"
+# Comprehensive regional mapping
+tilecraft generate \
+  --bbox "-105.5,39.5,-105.0,40.0" \
+  --features "rivers,lakes,mountains,forests,roads,buildings" \
+  --palette "alpine blue" \
+  --name "colorado_comprehensive"
 ```
 
-## 📖 Usage
+## 📖 CLI Commands
 
-### Command Line Options
+### Main Commands
 
+**Generate Vector Tiles**
 ```bash
-tilecraft [OPTIONS]
+tilecraft generate [OPTIONS]
 
 Required:
   --bbox TEXT        Bounding box as 'west,south,east,north'
-  --features TEXT    Feature types: rivers,forest,water,lakes,parks,roads,buildings  
+  --features TEXT    Comma-separated feature types (see 'tilecraft features')
   --palette TEXT     Style palette mood (e.g., 'subalpine dusk')
 
 Optional:
@@ -87,38 +87,82 @@ Optional:
   --min-zoom INT     Minimum zoom level (default: 0)
   --max-zoom INT     Maximum zoom level (default: 14)
   --no-cache         Disable caching
-  --preview          Generate preview
+  --preview          Generate preview after tile creation
   --verbose, -v      Verbose output
   --quiet, -q        Quiet mode
 ```
 
-### Examples
-
-**Natural Features**
+**Explore Available Features**
 ```bash
-tilecraft \
+tilecraft features [OPTIONS]
+
+Options:
+  --category TEXT    Filter by category (water, natural, transportation, etc.)
+  --search TEXT      Search feature names and descriptions
+  --count INT        Number of features to show (default: 50)
+```
+
+**Check System Dependencies**
+```bash
+tilecraft check [OPTIONS]
+
+Options:
+  --verbose, -v      Show detailed dependency information
+  --fix              Show installation commands for missing dependencies
+```
+
+### Usage Examples
+
+**Discover Features**
+```bash
+# See all 50+ available features
+tilecraft features
+
+# Find water-related features
+tilecraft features --search "water"
+
+# See transportation options
+tilecraft features --category "transportation"
+
+# Explore natural features
+tilecraft features --category "natural"
+```
+
+**Natural Features Mapping**
+```bash
+tilecraft generate \
   --bbox "-120.5,35.0,-120.0,35.5" \
-  --features "rivers,forest,water,wetlands" \
+  --features "rivers,forest,water,wetlands,mountains,beaches" \
   --palette "pacific northwest" \
-  --name "big_sur"
+  --name "big_sur_nature"
 ```
 
-**Urban Planning**
+**Urban Planning Analysis**
 ```bash
-tilecraft \
+tilecraft generate \
   --bbox "-74.1,40.6,-73.9,40.8" \
-  --features "roads,buildings,parks" \
+  --features "roads,buildings,parks,schools,hospitals,restaurants" \
   --palette "metropolitan" \
-  --max-zoom 16
+  --max-zoom 16 \
+  --name "manhattan_urban"
 ```
 
-**Hydrography Focus**
+**Infrastructure Mapping**
 ```bash
-tilecraft \
-  --bbox "-105.5,39.5,-105.0,40.0" \
-  --features "rivers,lakes,water" \
-  --palette "alpine blue" \
-  --name "colorado_water"
+tilecraft generate \
+  --bbox "-118.5,34.0,-118.0,34.5" \
+  --features "roads,railways,airports,power_lines,bridges" \
+  --palette "industrial" \
+  --name "la_infrastructure"
+```
+
+**Recreational Planning**
+```bash
+tilecraft generate \
+  --bbox "-106.0,39.0,-105.5,39.5" \
+  --features "parks,playgrounds,sports_fields,golf_courses,mountains,rivers" \
+  --palette "recreational" \
+  --name "denver_recreation"
 ```
 
 ## 📁 Output Structure
@@ -131,7 +175,8 @@ output/
 │   └── project_name-style.json  # MapLibre GL JS style
 ├── data/
 │   ├── rivers.geojson           # Extracted feature data
-│   ├── forests.geojson
+│   ├── buildings.geojson
+│   ├── roads.geojson
 │   └── schema.json              # AI-generated schema
 ├── cache/
 │   └── *.osm.pbf               # Cached OSM data
@@ -177,27 +222,46 @@ pip install -e .[dev]
 Copy `.env.example` to `.env` and configure:
 
 ```bash
-# Optional: Processing Configuration
+# Processing Configuration
 TILECRAFT_CACHE_ENABLED=true
-TILECRAFT_PARALLEL_PROCESSING=true
-TILECRAFT_MAX_WORKERS=4
-
-# Optional: Advanced Settings
-TILECRAFT_TILE_BUFFER=64
-TILECRAFT_SIMPLIFICATION_LEVEL=2
 ```
 
 ### Supported Features
 
-| Feature Type | OSM Tags | Geometry |
-|--------------|----------|----------|
-| `rivers` | waterway=river,stream,canal | LineString |
-| `forest` | natural=wood,forest; landuse=forest | Polygon |
-| `water` | natural=water; waterway=* | Polygon/LineString |
-| `lakes` | natural=water; water=lake | Polygon |
-| `parks` | leisure=park,nature_reserve | Polygon |
-| `roads` | highway=* | LineString |
-| `buildings` | building=* | Polygon |
+| Feature Type | OSM Tags | Geometry | Category |
+|--------------|----------|----------|----------|
+| `rivers` | waterway=river,stream,canal | LineString | Water |
+| `forest` | natural=wood,forest; landuse=forest | Polygon | Natural |
+| `water` | natural=water; waterway=* | Polygon/LineString | Water |
+| `lakes` | natural=water; water=lake | Polygon | Water |
+| `parks` | leisure=park,nature_reserve | Polygon | Recreation |
+| `roads` | highway=* | LineString | Transportation |
+| `buildings` | building=* | Polygon | Built Environment |
+| `railways` | railway=rail,tram,subway | LineString | Transportation |
+| `airports` | aeroway=aerodrome,runway | Polygon/LineString | Transportation |
+| `restaurants` | amenity=restaurant,cafe,bar | Point/Polygon | Amenities |
+| `shops` | shop=*; building=retail | Point/Polygon | Amenities |
+| `hospitals` | amenity=hospital; building=hospital | Point/Polygon | Built Environment |
+| `schools` | amenity=school; building=school | Point/Polygon | Built Environment |
+| `mountains` | natural=peak,ridge,volcano | Point | Natural |
+| `beaches` | natural=beach,sand | Polygon | Natural |
+| `farmland` | landuse=farmland,orchard | Polygon | Land Use |
+| `power_lines` | power=line,transmission | LineString | Infrastructure |
+| `boundaries` | boundary=administrative | LineString | Administrative |
+
+**🗺️ 50+ Feature Types Available!**
+
+To see all available features:
+```bash
+# List all features by category
+tilecraft features
+
+# Search for specific features
+tilecraft features --search "water"
+
+# Filter by category
+tilecraft features --category "transportation"
+```
 
 ### Style Palettes
 
@@ -216,42 +280,39 @@ Tilecraft streamlines OSM processing through:
 2. **Intelligent Schema Generation**: Creates well-structured tile schemas based on feature types and zoom requirements
 3. **Optimized Style Creation**: Generates MapLibre styles with carefully chosen color palettes and rendering rules
 4. **Advanced Caching**: Prevents redundant downloads and processing for faster iteration
+5. **Graceful Resource Management**: Proper cleanup prevents hanging and ensures smooth operation
 
 ## 🚨 Troubleshooting
 
-### System Dependencies
+### Quick System Check
 
-**Check Dependencies:**
 ```bash
-tilecraft check --verbose
-```
-
-**Install Missing Dependencies:**
-
-**macOS:**
-```bash
-brew install osmium-tool tippecanoe gdal
-pip install osmium fiona shapely
-```
-
-**Ubuntu/Debian:**
-```bash
-sudo apt-get update
-sudo apt-get install osmium-tool tippecanoe gdal-bin python3-gdal
-pip install osmium fiona shapely
-```
-
-**Windows (via conda):**
-```bash
-conda install -c conda-forge osmium-tool tippecanoe gdal
-pip install osmium fiona shapely
+# Check all dependencies and get installation help
+tilecraft check --verbose --fix
 ```
 
 ### Common Issues
 
+#### ❌ "tilecraft command not found"
+**Solution:** Install tilecraft in development mode
+```bash
+# Make sure you're in the tilecraft directory and virtual environment is active
+source .venv/bin/activate
+pip install -e .
+```
+
+#### ❌ "No such option: --bbox"
+**Solution:** Use the `generate` subcommand
+```bash
+# ❌ Wrong - missing 'generate'
+tilecraft --bbox "..." --features "..." --palette "..."
+
+# ✅ Correct - include 'generate' subcommand
+tilecraft generate --bbox "..." --features "..." --palette "..."
+```
+
 #### ❌ "tippecanoe not found"
-**Symptoms:** `Error: tippecanoe not found in PATH`
-**Solution:** Install tippecanoe via package manager or build from source
+**Solutions:**
 ```bash
 # macOS
 brew install tippecanoe
@@ -259,154 +320,41 @@ brew install tippecanoe
 # Ubuntu/Debian  
 sudo apt-get install tippecanoe
 
-# From source
-git clone https://github.com/felt/tippecanoe.git
-cd tippecanoe && make && sudo make install
+# Check installation
+tippecanoe --version
 ```
 
-#### ❌ "osmium import error"
-**Symptoms:** `ImportError: No module named 'osmium'`
-**Solution:** Install osmium Python bindings
-```bash
-pip install osmium
-# Or with conda
-conda install -c conda-forge osmium-tool
-```
+#### ❌ "CLI hangs after tile generation"
+**Solution:** This has been fixed! The CLI now properly cleans up resources and exits gracefully.
 
-#### ❌ "GDAL/OGR error"
-**Symptoms:** `FionaIOError` or `GDAL` related errors
-**Solution:** Install GDAL with Python bindings
-```bash
-# macOS
-brew install gdal
-pip install fiona gdal
-
-# Ubuntu/Debian
-sudo apt-get install gdal-bin python3-gdal
-pip install fiona
-
-# Windows
-conda install -c conda-forge gdal fiona
-```
-
-#### ❌ "Memory error during tile generation"
-**Symptoms:** `MemoryError` or tippecanoe crashes with large datasets
-**Solutions:**
-1. **Reduce zoom levels:** Use `--max-zoom 12` instead of 14
-2. **Smaller bounding box:** Process smaller regions
-3. **Disable cache:** Use `--no-cache` to free memory
-4. **Increase system memory:** Close other applications
-
-#### ❌ "OSM download timeout"
-**Symptoms:** `Connection timeout` or `HTTP 429` errors
-**Solutions:**
-1. **Check internet connection**
-2. **Use smaller bounding box** (reduce data size)
-3. **Retry with exponential backoff** (automatic)
-4. **Use different OSM endpoint** (automatic fallback)
-
-#### ❌ "Empty or missing features"
-**Symptoms:** Generated tiles contain no features or missing layers
-**Solutions:**
-1. **Verify OSM data exists** for your region
-2. **Check feature spelling:** Use exact feature names (rivers, forest, water)
-3. **Expand bounding box** to include more data
-4. **Check OSM tag coverage** for your region
-
-#### ❌ "Invalid bounding box"
-**Symptoms:** `ValueError: Invalid bounding box format`
+#### ❌ "Invalid bounding box format"
 **Solution:** Use correct format: `west,south,east,north`
 ```bash
-# Correct format
-tilecraft --bbox "-109.2,36.8,-106.8,38.5" --features "rivers" --palette "subalpine dusk"
+# ✅ Correct format
+tilecraft generate --bbox "-109.2,36.8,-106.8,38.5" --features "rivers" --palette "subalpine dusk"
 
-# Common mistakes:
-# ❌ Missing quotes: --bbox -109.2,36.8,-106.8,38.5
-# ❌ Wrong order: --bbox "36.8,-109.2,38.5,-106.8"
-# ❌ Extra spaces: --bbox " -109.2, 36.8, -106.8, 38.5 "
+# ❌ Common mistakes:
+# Missing quotes, wrong order, extra spaces
 ```
 
-#### ❌ "Permission denied"
-**Symptoms:** `PermissionError` when writing to output directory
-**Solutions:**
-1. **Check directory permissions:**
+#### ❌ "Unknown feature type"
+**Solution:** Check available features
 ```bash
-ls -la output/
-chmod 755 output/
-```
-2. **Use different output directory:**
-```bash
-tilecraft --output /tmp/tilecraft_output --bbox "..." --features "..." --palette "..."
-```
-3. **Run with appropriate permissions** (avoid sudo for tilecraft)
+# See all available features
+tilecraft features
 
-#### ❌ "MBTiles file corrupted"
-**Symptoms:** QGIS or MapLibre can't read generated tiles
-**Solutions:**
-1. **Verify file integrity:**
-```bash
-sqlite3 output/tiles/project.mbtiles "SELECT COUNT(*) FROM map;"
-```
-2. **Regenerate with fresh cache:**
-```bash
-rm -rf output/cache/*
-tilecraft --no-cache --bbox "..." --features "..." --palette "..."
-```
-3. **Check disk space** during generation
+# Search for specific features
+tilecraft features --search "water"
 
-### Performance Optimization
-
-#### 🐌 Slow Processing
-**For large regions or high zoom levels:**
-1. **Reduce zoom range:** `--min-zoom 8 --max-zoom 12`
-2. **Process smaller areas** in chunks
-3. **Use SSD storage** for better I/O performance
-4. **Increase system memory** (8GB+ recommended)
-5. **Close other applications** during processing
-
-#### 💾 High Memory Usage
-**Monitor and optimize:**
-```bash
-# Monitor memory usage
-top -p $(pgrep -f tilecraft)
-
-# Reduce memory footprint
-tilecraft --max-zoom 12 --no-cache --bbox "..." --features "..." --palette "..."
+# Check spelling - feature names are case-sensitive
 ```
 
-### Debug Mode
+### Performance Tips
 
-**Enable verbose output for troubleshooting:**
-```bash
-tilecraft --verbose --bbox "..." --features "..." --palette "..."
-```
-
-**Check system status:**
-```bash
-tilecraft check --verbose
-```
-
-**Validate configuration:**
-```bash
-# Test with minimal example
-tilecraft --bbox "-74.1,40.6,-73.9,40.8" --features "roads" --palette "urban midnight" --verbose
-```
-
-### Getting Help
-
-1. **Check this troubleshooting guide** for common issues
-2. **Run system check:** `tilecraft check --verbose`
-3. **Enable verbose mode:** Add `--verbose` to your command
-4. **Check logs:** Look for error messages in terminal output
-5. **Verify dependencies:** Ensure all system tools are installed
-6. **Test with minimal example:** Use small bounding box and single feature type
-
-### Support Resources
-
-- 📖 **Documentation**: [QGIS Testing Guide](docs/QGIS_TESTING_GUIDE.md)
-- 🐛 **Issues**: Check existing issues or create new one
-- 💬 **Discussions**: Community support and questions
-- 🔧 **System Check**: `tilecraft check --fix` for installation help
+- **Large regions:** Use `--max-zoom 12` instead of 14
+- **Memory issues:** Process smaller bounding boxes
+- **Slow processing:** Close other applications, use SSD storage
+- **Cache:** Use `--no-cache` if running low on disk space
 
 ## 🚀 Development
 
@@ -437,7 +385,7 @@ tilecraft/
 ├── src/tilecraft/
 │   ├── cli.py              # Command-line interface
 │   ├── core/               # OSM processing
-│   ├── ai/                 # AI integration
+│   ├── ai/                 # AI integration  
 │   ├── models/             # Data models
 │   └── utils/              # Utilities
 ├── tests/                  # Test suite
@@ -462,16 +410,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - [OpenStreetMap](https://www.openstreetmap.org/) contributors
-- [Tippecanoe](https://github.com/mapbox/tippecanoe) by Mapbox
+- [Tippecanoe](https://github.com/felt/tippecanoe) by Mapbox
 - [Osmium](https://osmcode.org/osmium-tool/) by OSM developers
 - [MapLibre GL JS](https://maplibre.org/) community
 
 ## 📞 Support
 
-- 📖 [Documentation](https://tilecraft.readthedocs.io)
-- 🐛 [Issue Tracker](https://github.com/username/tilecraft/issues)
-- 💬 [Discussions](https://github.com/username/tilecraft/discussions)
+- 🔧 **System Check**: `tilecraft check --fix` for installation help
+- 🗺️ **Feature Discovery**: `tilecraft features` to explore options
+- 🐛 **Issues**: Check existing issues or create new one
+- 💬 **Discussions**: Community support and questions
 
 ---
 
-*"Design is not just what it looks like and feels like. Design is how it works." – Steve Jobs* 
+*"The best way to find out if you can trust somebody is to trust them." – Ernest Hemingway*
