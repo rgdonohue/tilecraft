@@ -318,6 +318,17 @@ class OSMDownloader:
                             query, output_path, progress, task_id
                         )
                     )
+                    
+                    # Ensure event loop is properly cleaned up
+                    try:
+                        # Get the current event loop policy
+                        loop_policy = asyncio.get_event_loop_policy()
+                        # Force cleanup of any remaining loop state
+                        if hasattr(loop_policy, '_local'):
+                            loop_policy._local = None
+                    except Exception:
+                        # Ignore cleanup errors - they're not critical
+                        pass
 
                     # Success!
                     return output_path

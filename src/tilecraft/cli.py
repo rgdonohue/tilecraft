@@ -232,9 +232,44 @@ def generate(
             if verbose:
                 console.print(f"[yellow]Warning: Cleanup error: {cleanup_error}[/yellow]")
         
-        # Force garbage collection to clean up any lingering objects
-        import gc
-        gc.collect()
+        # Additional cleanup to ensure clean exit
+        try:
+            # Clean up any remaining threads
+            import threading
+            import concurrent.futures
+            
+            # Wait a short time for any background threads to finish
+            active_threads = [t for t in threading.enumerate() if t != threading.current_thread()]
+            if active_threads:
+                if verbose:
+                    console.print(f"[yellow]Waiting for {len(active_threads)} background threads to finish...[/yellow]")
+                    for thread in active_threads:
+                        console.print(f"[yellow]  - {thread.name}: {type(thread).__name__}[/yellow]")
+            
+            # Give threads a chance to finish gracefully
+            for thread in active_threads:
+                if hasattr(thread, '_stop_event'):
+                    thread._stop_event.set()
+            
+            # Clean up any remaining executor instances (though this should be handled already)
+            # Force garbage collection to clean up any lingering objects
+            import gc
+            gc.collect()
+            
+            # Final asyncio cleanup
+            try:
+                import asyncio
+                loop_policy = asyncio.get_event_loop_policy()
+                if hasattr(loop_policy, '_local'):
+                    loop_policy._local = None
+                if verbose:
+                    console.print("[green]Asyncio cleanup completed[/green]")
+            except Exception:
+                pass  # Ignore asyncio cleanup errors
+                
+        except Exception as final_cleanup_error:
+            if verbose:
+                console.print(f"[yellow]Warning: Final cleanup error: {final_cleanup_error}[/yellow]")
 
 
 def display_config_summary(config: TilecraftConfig):
@@ -492,7 +527,24 @@ def check_system(verbose: bool, fix: bool):
 
 def main():
     """Main entry point for CLI."""
-    cli()
+    try:
+        cli()
+    finally:
+        # Ensure clean exit - force process termination if needed
+        import os
+        import sys
+        # Give any remaining threads a brief moment to finish
+        import time
+        time.sleep(0.1)
+        # Force exit if we're still running after cleanup
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+        # Use os._exit as last resort to bypass any hanging resources
+        # This is commented out for now as it's quite aggressive
+        # os._exit(0)
 
 
 if __name__ == "__main__":

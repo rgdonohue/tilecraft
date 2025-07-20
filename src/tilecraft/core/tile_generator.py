@@ -222,12 +222,16 @@ class TileGenerator:
             TileGenerationError: Invalid input files or no valid files found
         """
         validated_files = {}
+        empty_files = []
+        invalid_files = []
 
         for feature_type, file_path in feature_files.items():
             if not file_path.exists():
-                raise TileGenerationError(f"Feature file not found: {file_path}")
+                invalid_files.append(f"{feature_type}: File not found ({file_path})")
+                continue
 
             if file_path.stat().st_size == 0:
+                empty_files.append(feature_type)
                 logger.warning(
                     f"Skipping empty feature file: {feature_type} ({file_path})"
                 )
@@ -238,23 +242,21 @@ class TileGenerator:
                 with open(file_path) as f:
                     content = f.read()
                     if not content.strip().startswith("{"):
-                        raise TileGenerationError(
-                            f"Invalid GeoJSON format: {file_path}"
-                        )
+                        invalid_files.append(f"{feature_type}: Invalid GeoJSON format ({file_path})")
+                        continue
 
                     # Parse the full JSON to check for features
                     geojson_data = json.loads(content)
 
                     # Check if it's a valid FeatureCollection
                     if geojson_data.get("type") != "FeatureCollection":
-                        logger.warning(
-                            f"Skipping non-FeatureCollection file: {feature_type} ({file_path})"
-                        )
+                        invalid_files.append(f"{feature_type}: Not a FeatureCollection ({file_path})")
                         continue
 
                     # Check if it has features
                     features = geojson_data.get("features", [])
                     if not features or len(features) == 0:
+                        empty_files.append(feature_type)
                         logger.warning(
                             f"Skipping feature file with no features: {feature_type} ({file_path})"
                         )
@@ -265,16 +267,47 @@ class TileGenerator:
                     logger.info(f"Validated {feature_type}: {len(features)} features")
 
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                raise TileGenerationError(f"Invalid GeoJSON file {file_path}: {e}")
+                invalid_files.append(f"{feature_type}: Invalid JSON ({e})")
+                continue
             except Exception as e:
                 logger.warning(f"Could not fully validate {file_path}: {e}")
 
-        # Check if we have any valid files
+        # Provide comprehensive error message if no valid files
         if not validated_files:
-            raise TileGenerationError(
-                "No valid feature files with data found for tile generation"
-            )
+            error_parts = ["No valid feature files with data found for tile generation."]
+            
+            if empty_files:
+                error_parts.append(f"\nFeature types with no data found: {', '.join(empty_files)}")
+                error_parts.append("\nPossible causes:")
+                error_parts.append("• The bounding box might not contain these feature types")
+                error_parts.append("• OSM data in this region might not have these features tagged")
+                error_parts.append("• Feature names might be misspelled (check 'tilecraft features')")
+                
+            if invalid_files:
+                error_parts.append(f"\nInvalid files: {', '.join(invalid_files)}")
+                
+            error_parts.append("\nSuggestions:")
+            error_parts.append("• Check available features: tilecraft features")
+            error_parts.append("• Try a different bounding box with more data")
+            error_parts.append("• Use more common feature types like 'roads', 'buildings', 'water'")
+            error_parts.append("• Verify your bounding box contains the expected geography")
+            
+            # Add specific suggestions based on failed feature types
+            if any(ft in empty_files for ft in ['shops', 'restaurants', 'hotels', 'banks']):
+                error_parts.append("• For amenities (shops, restaurants, etc.), try urban areas")
+            if any(ft in empty_files for ft in ['beaches', 'coastline']):
+                error_parts.append("• For coastal features, ensure your bounding box includes coastline")
+            if any(ft in empty_files for ft in ['mountains', 'peaks', 'glaciers']):
+                error_parts.append("• For mountain features, try mountainous regions")
+                
+            raise TileGenerationError("\n".join(error_parts))
 
+        # Log summary of what was found
+        if empty_files or invalid_files:
+            logger.info(f"Processing {len(validated_files)} valid feature types")
+            if empty_files:
+                logger.info(f"Skipped {len(empty_files)} empty feature types: {', '.join(empty_files)}")
+                
         return validated_files
 
     def _generate_cache_key(self, feature_files: dict[str, Path]) -> str:
@@ -414,6 +447,7 @@ class TileGenerator:
 
             # Start memory monitoring
             monitor_future = None
+            executor = None
             if attempt == 0:  # Only monitor on first attempt to avoid overhead
                 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
                 monitor_future = executor.submit(
@@ -426,10 +460,11 @@ class TileGenerator:
                     cmd, progress, main_task
                 )
 
-                # Stop memory monitoring
+                # Stop memory monitoring and ensure proper shutdown
                 if monitor_future:
                     monitor_future.cancel()
-                    executor.shutdown(wait=False)
+                if executor:
+                    executor.shutdown(wait=True)  # Wait for background threads to finish
 
                 # Move temporary file to final location
                 if temp_output.exists():
@@ -453,7 +488,8 @@ class TileGenerator:
                 # Cleanup on error
                 if monitor_future:
                     monitor_future.cancel()
-                    executor.shutdown(wait=False)
+                if executor:
+                    executor.shutdown(wait=True)  # Ensure proper cleanup even on error
                 if temp_output.exists():
                     temp_output.unlink()
                 raise e
@@ -644,7 +680,17 @@ class TileGenerator:
                     f"Tippecanoe failed (exit code {return_code}): {error_msg}"
                 )
 
-            # Success
+            # Success - explicitly close process pipes to avoid hanging
+            try:
+                if process.stdout:
+                    process.stdout.close()
+                if process.stderr:
+                    process.stderr.close()
+                if process.stdin:
+                    process.stdin.close()
+            except Exception:
+                pass  # Ignore cleanup errors
+            
             result = subprocess.CompletedProcess(
                 cmd, return_code, stdout="\n".join(output_lines), stderr=None
             )
@@ -749,7 +795,14 @@ class TileGenerator:
         """Monitor memory usage during processing."""
         try:
             while True:
-                time.sleep(self.MEMORY_CHECK_INTERVAL)
+                # Sleep in smaller intervals to be more responsive to cancellation
+                for _ in range(int(self.MEMORY_CHECK_INTERVAL * 4)):  # 0.25 second intervals
+                    time.sleep(0.25)
+                    # Check if thread should be cancelled (this makes cancellation more responsive)
+                    import threading
+                    if getattr(threading.current_thread(), '_stop_event', None) and threading.current_thread()._stop_event.is_set():
+                        logger.debug("Memory monitoring cancelled")
+                        return
 
                 # Get system memory info
                 memory = psutil.virtual_memory()
