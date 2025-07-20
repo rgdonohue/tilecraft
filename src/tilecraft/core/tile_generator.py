@@ -464,7 +464,8 @@ class TileGenerator:
                 if monitor_future:
                     monitor_future.cancel()
                 if executor:
-                    executor.shutdown(wait=True)  # Wait for background threads to finish
+                    # Don't wait indefinitely for executor shutdown
+                    executor.shutdown(wait=False)
 
                 # Move temporary file to final location
                 if temp_output.exists():
@@ -756,6 +757,18 @@ class TileGenerator:
                         process.wait()
                     except Exception:
                         pass
+            
+            # Explicitly close process pipes to prevent hanging
+            if process:
+                try:
+                    if process.stdout:
+                        process.stdout.close()
+                    if process.stderr:
+                        process.stderr.close()
+                    if process.stdin:
+                        process.stdin.close()
+                except Exception:
+                    pass  # Ignore pipe closure errors
 
     def _parse_tippecanoe_progress(self, line: str) -> str:
         """Parse tippecanoe output for progress information."""

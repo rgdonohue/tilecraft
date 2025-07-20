@@ -246,10 +246,34 @@ def generate(
                     for thread in active_threads:
                         console.print(f"[yellow]  - {thread.name}: {type(thread).__name__}[/yellow]")
             
-            # Give threads a chance to finish gracefully
+            # Give threads a chance to finish gracefully with timeout
             for thread in active_threads:
                 if hasattr(thread, '_stop_event'):
                     thread._stop_event.set()
+            
+            # Wait up to 2 seconds for threads to finish
+            import time
+            max_wait = 2.0
+            wait_step = 0.1
+            elapsed = 0
+            while elapsed < max_wait:
+                remaining_threads = [t for t in threading.enumerate() if t != threading.current_thread() and t.is_alive()]
+                if not remaining_threads:
+                    break
+                time.sleep(wait_step)
+                elapsed += wait_step
+            
+            # Log remaining threads if any
+            if remaining_threads and verbose:
+                console.print(f"[yellow]Warning: {len(remaining_threads)} threads still running after cleanup[/yellow]")
+            
+            # Force cleanup of stubborn threads (last resort)
+            if remaining_threads:
+                for thread in remaining_threads:
+                    if hasattr(thread, '_stop'):
+                        thread._stop()
+                    # Set daemon flag to prevent hanging
+                    thread.daemon = True
             
             # Clean up any remaining executor instances (though this should be handled already)
             # Force garbage collection to clean up any lingering objects
@@ -270,6 +294,13 @@ def generate(
         except Exception as final_cleanup_error:
             if verbose:
                 console.print(f"[yellow]Warning: Final cleanup error: {final_cleanup_error}[/yellow]")
+        
+        # Ensure all output is flushed before exit
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
 
 
 def display_config_summary(config: TilecraftConfig):
@@ -543,8 +574,8 @@ def main():
         except Exception:
             pass
         # Use os._exit as last resort to bypass any hanging resources
-        # This is commented out for now as it's quite aggressive
-        # os._exit(0)
+        # For large datasets, this prevents indefinite hanging
+        os._exit(0)  # Force exit to prevent ThreadPoolExecutor hanging
 
 
 if __name__ == "__main__":

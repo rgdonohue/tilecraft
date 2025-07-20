@@ -331,7 +331,7 @@ class FeatureExtractor:
             },
             FeatureType.LAKES: {
                 "natural": ["water"],
-                "water": ["lake", "pond", "lagoon"],
+                "landuse": ["reservoir", "basin"],
             },
             FeatureType.WETLANDS: {"natural": ["wetland", "marsh", "swamp"]},
             FeatureType.WATERWAYS: {
@@ -377,7 +377,7 @@ class FeatureExtractor:
                 "highway": ["motorway", "motorway_link", "trunk", "trunk_link"]
             },
             FeatureType.RAILWAYS: {
-                "railway": ["rail", "tram", "light_rail", "subway", "monorail", "narrow_gauge"]
+                "railway": ["rail", "tram", "light_rail", "subway", "monorail", "narrow_gauge", "abandoned"]
             },
             FeatureType.AIRPORTS: {
                 "aeroway": ["aerodrome", "runway", "taxiway", "terminal", "gate", "apron"]
@@ -440,7 +440,7 @@ class FeatureExtractor:
             
             # Infrastructure
             FeatureType.POWER_LINES: {
-                "power": ["line", "cable", "transmission", "substation"],
+                "power": ["line", "cable", "transmission", "substation", "tower"],
                 "man_made": ["transmission_line"]
             },
             FeatureType.WIND_TURBINES: {
