@@ -13,14 +13,75 @@ from pydantic_settings import BaseSettings
 class FeatureType(str, Enum):
     """Supported OSM feature types."""
 
+    # Water Features
     RIVERS = "rivers"
-    FOREST = "forest"
     WATER = "water"
     LAKES = "lakes"
     WETLANDS = "wetlands"
+    WATERWAYS = "waterways"
+    COASTLINE = "coastline"
+    
+    # Natural Features
+    FOREST = "forest"
+    WOODS = "woods"
+    MOUNTAINS = "mountains"
+    PEAKS = "peaks"
+    CLIFFS = "cliffs"
+    BEACHES = "beaches"
+    GLACIERS = "glaciers"
+    VOLCANOES = "volcanoes"
+    
+    # Land Use
     PARKS = "parks"
+    FARMLAND = "farmland"
+    RESIDENTIAL = "residential"
+    COMMERCIAL = "commercial"
+    INDUSTRIAL = "industrial"
+    MILITARY = "military"
+    CEMETERIES = "cemeteries"
+    
+    # Transportation
     ROADS = "roads"
+    HIGHWAYS = "highways"
+    RAILWAYS = "railways"
+    AIRPORTS = "airports"
+    BRIDGES = "bridges"
+    TUNNELS = "tunnels"
+    PATHS = "paths"
+    CYCLEWAYS = "cycleways"
+    
+    # Built Environment  
     BUILDINGS = "buildings"
+    CHURCHES = "churches"
+    SCHOOLS = "schools"
+    HOSPITALS = "hospitals"
+    UNIVERSITIES = "universities"
+    
+    # Amenities
+    RESTAURANTS = "restaurants"
+    SHOPS = "shops"
+    HOTELS = "hotels"
+    BANKS = "banks"
+    FUEL_STATIONS = "fuel_stations"
+    POST_OFFICES = "post_offices"
+    
+    # Recreation
+    PLAYGROUNDS = "playgrounds"
+    SPORTS_FIELDS = "sports_fields"
+    GOLF_COURSES = "golf_courses"
+    STADIUMS = "stadiums"
+    SWIMMING_POOLS = "swimming_pools"
+    
+    # Infrastructure
+    POWER_LINES = "power_lines"
+    WIND_TURBINES = "wind_turbines"
+    SOLAR_FARMS = "solar_farms"
+    DAMS = "dams"
+    BARRIERS = "barriers"
+    
+    # Administrative
+    BOUNDARIES = "boundaries"
+    PROTECTED_AREAS = "protected_areas"
 
 
 class BoundingBox(BaseModel):

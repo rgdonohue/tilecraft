@@ -321,12 +321,9 @@ class FeatureExtractor:
 
         # Enhanced feature type to OSM tag mappings
         self.feature_mappings = {
+            # Water Features
             FeatureType.RIVERS: {
                 "waterway": ["river", "stream", "canal", "drain", "ditch", "waterfall"]
-            },
-            FeatureType.FOREST: {
-                "natural": ["wood", "forest", "scrub"],
-                "landuse": ["forest", "forestry"],
             },
             FeatureType.WATER: {
                 "natural": ["water", "bay", "strait"],
@@ -337,24 +334,137 @@ class FeatureExtractor:
                 "water": ["lake", "pond", "lagoon"],
             },
             FeatureType.WETLANDS: {"natural": ["wetland", "marsh", "swamp"]},
+            FeatureType.WATERWAYS: {
+                "waterway": ["river", "stream", "canal", "drain", "ditch", "rapids", "waterfall"]
+            },
+            FeatureType.COASTLINE: {"natural": ["coastline", "beach", "bay"]},
+            
+            # Natural Features
+            FeatureType.FOREST: {
+                "natural": ["wood", "forest", "scrub"],
+                "landuse": ["forest", "forestry"],
+            },
+            FeatureType.WOODS: {"natural": ["wood", "forest"]},
+            FeatureType.MOUNTAINS: {"natural": ["peak", "ridge", "saddle", "volcano"]},
+            FeatureType.PEAKS: {"natural": ["peak", "volcano"]},
+            FeatureType.CLIFFS: {"natural": ["cliff", "rock", "scree", "stone"]},
+            FeatureType.BEACHES: {"natural": ["beach", "sand", "shingle"]},
+            FeatureType.GLACIERS: {"natural": ["glacier"]},
+            FeatureType.VOLCANOES: {"natural": ["volcano"]},
+            
+            # Land Use
             FeatureType.PARKS: {
                 "leisure": ["park", "nature_reserve", "recreation_ground", "garden"],
                 "boundary": ["national_park", "protected_area"],
             },
+            FeatureType.FARMLAND: {
+                "landuse": ["farmland", "orchard", "vineyard", "plant_nursery", "greenhouse_horticulture"]
+            },
+            FeatureType.RESIDENTIAL: {"landuse": ["residential"]},
+            FeatureType.COMMERCIAL: {"landuse": ["commercial", "retail"]},
+            FeatureType.INDUSTRIAL: {"landuse": ["industrial", "port", "quarry"]},
+            FeatureType.MILITARY: {"landuse": ["military"], "military": ["*"]},
+            FeatureType.CEMETERIES: {"landuse": ["cemetery"], "amenity": ["grave_yard"]},
+            
+            # Transportation
             FeatureType.ROADS: {
                 "highway": [
-                    "motorway",
-                    "trunk",
-                    "primary",
-                    "secondary",
-                    "tertiary",
-                    "unclassified",
-                    "residential",
-                    "service",
-                    "track",
+                    "motorway", "trunk", "primary", "secondary", "tertiary",
+                    "unclassified", "residential", "service", "track",
                 ]
             },
+            FeatureType.HIGHWAYS: {
+                "highway": ["motorway", "motorway_link", "trunk", "trunk_link"]
+            },
+            FeatureType.RAILWAYS: {
+                "railway": ["rail", "tram", "light_rail", "subway", "monorail", "narrow_gauge"]
+            },
+            FeatureType.AIRPORTS: {
+                "aeroway": ["aerodrome", "runway", "taxiway", "terminal", "gate", "apron"]
+            },
+            FeatureType.BRIDGES: {"bridge": ["yes"], "man_made": ["bridge"]},
+            FeatureType.TUNNELS: {"tunnel": ["yes"], "man_made": ["tunnel"]},
+            FeatureType.PATHS: {
+                "highway": ["path", "footway", "cycleway", "bridleway", "steps"]
+            },
+            FeatureType.CYCLEWAYS: {"highway": ["cycleway"], "cycleway": ["*"]},
+            
+            # Built Environment
             FeatureType.BUILDINGS: {"building": ["*"]},
+            FeatureType.CHURCHES: {
+                "building": ["church", "cathedral", "chapel"],
+                "amenity": ["place_of_worship"]
+            },
+            FeatureType.SCHOOLS: {
+                "building": ["school"],
+                "amenity": ["school", "kindergarten", "university", "college"]
+            },
+            FeatureType.HOSPITALS: {
+                "building": ["hospital"],
+                "amenity": ["hospital", "clinic", "doctors"]
+            },
+            FeatureType.UNIVERSITIES: {
+                "building": ["university", "college"],
+                "amenity": ["university", "college"]
+            },
+            
+            # Amenities
+            FeatureType.RESTAURANTS: {
+                "amenity": ["restaurant", "fast_food", "cafe", "bar", "pub", "food_court"]
+            },
+            FeatureType.SHOPS: {
+                "shop": ["*"],
+                "building": ["retail", "shop"],
+                "amenity": ["marketplace"]
+            },
+            FeatureType.HOTELS: {
+                "tourism": ["hotel", "motel", "hostel", "guest_house"],
+                "building": ["hotel"]
+            },
+            FeatureType.BANKS: {"amenity": ["bank", "atm"], "building": ["bank"]},
+            FeatureType.FUEL_STATIONS: {"amenity": ["fuel"], "building": ["fuel"]},
+            FeatureType.POST_OFFICES: {"amenity": ["post_office"], "building": ["post_office"]},
+            
+            # Recreation
+            FeatureType.PLAYGROUNDS: {"leisure": ["playground"]},
+            FeatureType.SPORTS_FIELDS: {
+                "leisure": ["sports_centre", "stadium", "pitch"],
+                "sport": ["*"]
+            },
+            FeatureType.GOLF_COURSES: {"leisure": ["golf_course"], "sport": ["golf"]},
+            FeatureType.STADIUMS: {"leisure": ["stadium"], "building": ["stadium"]},
+            FeatureType.SWIMMING_POOLS: {
+                "leisure": ["swimming_pool"],
+                "amenity": ["swimming_pool"]
+            },
+            
+            # Infrastructure
+            FeatureType.POWER_LINES: {
+                "power": ["line", "cable", "transmission", "substation"],
+                "man_made": ["transmission_line"]
+            },
+            FeatureType.WIND_TURBINES: {
+                "generator:source": ["wind"],
+                "man_made": ["wind_turbine"]
+            },
+            FeatureType.SOLAR_FARMS: {
+                "generator:source": ["solar"],
+                "landuse": ["industrial"],
+                "man_made": ["solar_panel"]
+            },
+            FeatureType.DAMS: {"waterway": ["dam"], "man_made": ["dam"]},
+            FeatureType.BARRIERS: {
+                "barrier": ["wall", "fence", "hedge", "retaining_wall", "city_wall"]
+            },
+            
+            # Administrative
+            FeatureType.BOUNDARIES: {
+                "boundary": ["administrative", "political", "postal_code"]
+            },
+            FeatureType.PROTECTED_AREAS: {
+                "boundary": ["protected_area", "national_park"],
+                "leisure": ["nature_reserve"]
+            },
         }
 
     def extract(

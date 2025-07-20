@@ -223,6 +223,18 @@ def generate(
         if verbose:
             console.print_exception()
         sys.exit(1)
+    finally:
+        # Critical: Clean up resources to prevent hanging
+        try:
+            if 'pipeline' in locals():
+                pipeline.cleanup()
+        except Exception as cleanup_error:
+            if verbose:
+                console.print(f"[yellow]Warning: Cleanup error: {cleanup_error}[/yellow]")
+        
+        # Force garbage collection to clean up any lingering objects
+        import gc
+        gc.collect()
 
 
 def display_config_summary(config: TilecraftConfig):
@@ -308,6 +320,105 @@ Files generated:
         border_style="green",
     )
     console.print(panel)
+
+
+@cli.command("features")
+@click.option("--category", help="Filter by category (water, natural, landuse, transportation, etc.)")
+@click.option("--search", help="Search feature names and descriptions")
+@click.option("--count", type=int, default=50, help="Number of features to show (default: 50)")
+def list_features(category: Optional[str], search: Optional[str], count: int):
+    """List all available OSM feature types that can be extracted."""
+    from tilecraft.models.config import FeatureType
+    
+    console.print("\n[bold blue]🗺️  Available OSM Features in Tilecraft[/bold blue]\n")
+    
+    # Group features by category
+    feature_categories = {
+        "Water Features": [
+            FeatureType.RIVERS, FeatureType.WATER, FeatureType.LAKES, 
+            FeatureType.WETLANDS, FeatureType.WATERWAYS, FeatureType.COASTLINE
+        ],
+        "Natural Features": [
+            FeatureType.FOREST, FeatureType.WOODS, FeatureType.MOUNTAINS,
+            FeatureType.PEAKS, FeatureType.CLIFFS, FeatureType.BEACHES,
+            FeatureType.GLACIERS, FeatureType.VOLCANOES
+        ],
+        "Land Use": [
+            FeatureType.PARKS, FeatureType.FARMLAND, FeatureType.RESIDENTIAL,
+            FeatureType.COMMERCIAL, FeatureType.INDUSTRIAL, FeatureType.MILITARY,
+            FeatureType.CEMETERIES
+        ],
+        "Transportation": [
+            FeatureType.ROADS, FeatureType.HIGHWAYS, FeatureType.RAILWAYS,
+            FeatureType.AIRPORTS, FeatureType.BRIDGES, FeatureType.TUNNELS,
+            FeatureType.PATHS, FeatureType.CYCLEWAYS
+        ],
+        "Built Environment": [
+            FeatureType.BUILDINGS, FeatureType.CHURCHES, FeatureType.SCHOOLS,
+            FeatureType.HOSPITALS, FeatureType.UNIVERSITIES
+        ],
+        "Amenities": [
+            FeatureType.RESTAURANTS, FeatureType.SHOPS, FeatureType.HOTELS,
+            FeatureType.BANKS, FeatureType.FUEL_STATIONS, FeatureType.POST_OFFICES
+        ],
+        "Recreation": [
+            FeatureType.PLAYGROUNDS, FeatureType.SPORTS_FIELDS, FeatureType.GOLF_COURSES,
+            FeatureType.STADIUMS, FeatureType.SWIMMING_POOLS
+        ],
+        "Infrastructure": [
+            FeatureType.POWER_LINES, FeatureType.WIND_TURBINES, FeatureType.SOLAR_FARMS,
+            FeatureType.DAMS, FeatureType.BARRIERS
+        ],
+        "Administrative": [
+            FeatureType.BOUNDARIES, FeatureType.PROTECTED_AREAS
+        ]
+    }
+    
+    # Filter by category if specified
+    if category:
+        category_key = None
+        for key in feature_categories.keys():
+            if category.lower() in key.lower():
+                category_key = key
+                break
+        
+        if category_key:
+            feature_categories = {category_key: feature_categories[category_key]}
+        else:
+            console.print(f"[red]Category '{category}' not found. Available categories:[/red]")
+            for cat in feature_categories.keys():
+                console.print(f"  • {cat.lower()}")
+            return
+    
+    # Display features
+    total_shown = 0
+    for cat_name, features in feature_categories.items():
+        if total_shown >= count:
+            break
+            
+        # Filter by search term if specified
+        if search:
+            features = [f for f in features if search.lower() in f.value.lower()]
+            if not features:
+                continue
+        
+        console.print(f"[bold cyan]{cat_name}[/bold cyan]")
+        
+        for feature in features[:count - total_shown]:
+            # Create a nice description based on the feature name
+            description = feature.value.replace('_', ' ').title()
+            console.print(f"  • [green]{feature.value}[/green] - {description}")
+            total_shown += 1
+            
+            if total_shown >= count:
+                break
+        
+        console.print()
+    
+    console.print(f"[bold]Total features available: {len([f for features in feature_categories.values() for f in features])}[/bold]")
+    console.print("\n[blue]Usage:[/blue]")
+    console.print("  tilecraft generate --features \"rivers,buildings,parks\" --bbox \"...\" --palette \"...\"")
+    console.print("\n[yellow]💡 Tip:[/yellow] Use --search to find specific features, --category to filter by type")
 
 
 @cli.command("check")

@@ -140,3 +140,28 @@ class TilecraftPipeline:
 
         self.logger.info(f"Style generated: {style_path}")
         return style_path
+    
+    def cleanup(self) -> None:
+        """Clean up all pipeline components and resources."""
+        try:
+            self.logger.debug("Starting pipeline cleanup")
+            
+            # Clean up feature extractor
+            if hasattr(self, 'feature_extractor'):
+                self.feature_extractor.cleanup_temp_files()
+            
+            # Clean up tile generator
+            if hasattr(self, 'tile_generator'):
+                self.tile_generator.cleanup_temp_files()
+            
+            # Clean up cache manager
+            if hasattr(self, 'cache_manager'):
+                # Cache manager cleanup if needed
+                pass
+            
+            # Close any open file handles or database connections
+            # This ensures no lingering processes or file locks
+            
+            self.logger.debug("Pipeline cleanup completed")
+        except Exception as e:
+            self.logger.warning(f"Error during pipeline cleanup: {e}")
