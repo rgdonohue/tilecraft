@@ -63,7 +63,7 @@ tilecraft generate \
 # Comprehensive regional mapping
 tilecraft generate \
   --bbox "-105.5,39.5,-105.0,40.0" \
-  --features "rivers,lakes,mountains,forests,roads,buildings" \
+  --features "rivers,lakes,mountains,forest,roads,buildings" \
   --palette "alpine blue" \
   --name "colorado_comprehensive"
 ```
@@ -228,28 +228,23 @@ TILECRAFT_CACHE_ENABLED=true
 
 ### Supported Features
 
-| Feature Type | OSM Tags | Geometry | Category |
-|--------------|----------|----------|----------|
-| `rivers` | waterway=river,stream,canal | LineString | Water |
-| `forest` | natural=wood,forest; landuse=forest | Polygon | Natural |
-| `water` | natural=water; waterway=* | Polygon/LineString | Water |
-| `lakes` | natural=water; water=lake | Polygon | Water |
-| `parks` | leisure=park,nature_reserve | Polygon | Recreation |
-| `roads` | highway=* | LineString | Transportation |
-| `buildings` | building=* | Polygon | Built Environment |
-| `railways` | railway=rail,tram,subway | LineString | Transportation |
-| `airports` | aeroway=aerodrome,runway | Polygon/LineString | Transportation |
-| `restaurants` | amenity=restaurant,cafe,bar | Point/Polygon | Amenities |
-| `shops` | shop=*; building=retail | Point/Polygon | Amenities |
-| `hospitals` | amenity=hospital; building=hospital | Point/Polygon | Built Environment |
-| `schools` | amenity=school; building=school | Point/Polygon | Built Environment |
-| `mountains` | natural=peak,ridge,volcano | Point | Natural |
-| `beaches` | natural=beach,sand | Polygon | Natural |
-| `farmland` | landuse=farmland,orchard | Polygon | Land Use |
-| `power_lines` | power=line,transmission | LineString | Infrastructure |
-| `boundaries` | boundary=administrative | LineString | Administrative |
+**🗺️ 52 Feature Types Available Across 8 Categories:**
 
-**🗺️ 50+ Feature Types Available!**
+- **Water Features (6)**: rivers, water, lakes, wetlands, waterways, coastline
+- **Natural Features (8)**: forest, woods, mountains, peaks, cliffs, beaches, glaciers, volcanoes  
+- **Land Use (7)**: parks, farmland, residential, commercial, industrial, military, cemeteries
+- **Transportation (8)**: roads, highways, railways, airports, bridges, tunnels, paths, cycleways
+- **Built Environment (5)**: buildings, churches, schools, hospitals, universities
+- **Amenities (6)**: restaurants, shops, hotels, banks, fuel_stations, post_offices
+- **Recreation (5)**: playgrounds, sports_fields, golf_courses, stadiums, swimming_pools
+- **Infrastructure (5)**: power_lines, wind_turbines, solar_farms, dams, barriers
+- **Administrative (2)**: boundaries, protected_areas
+
+**✨ All Features Fully Supported with:**
+- Optimized OSM Overpass queries
+- Smart tag extraction and filtering  
+- Automatic geometry validation
+- Efficient caching and processing
 
 To see all available features:
 ```bash

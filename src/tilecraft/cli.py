@@ -391,7 +391,7 @@ Files generated:
 @cli.command("features")
 @click.option("--category", help="Filter by category (water, natural, landuse, transportation, etc.)")
 @click.option("--search", help="Search feature names and descriptions")
-@click.option("--count", type=int, default=50, help="Number of features to show (default: 50)")
+@click.option("--count", type=int, default=100, help="Number of features to show (default: 100)")
 def list_features(category: Optional[str], search: Optional[str], count: int):
     """List all available OSM feature types that can be extracted."""
     from tilecraft.models.config import FeatureType
