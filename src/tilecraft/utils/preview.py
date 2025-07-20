@@ -55,7 +55,7 @@ class PreviewGenerator:
         self, mbtiles_path: Path, style_path: Path, bbox: Optional[BoundingBox] = None
     ) -> Path:
         """
-        Generate interactive HTML preview.
+        Generate interactive HTML preview with tileserver-gl-light integration.
 
         Args:
             mbtiles_path: Path to MBTiles file
@@ -71,19 +71,19 @@ class PreviewGenerator:
         if bbox is None:
             bbox = self._extract_bounds_from_mbtiles(mbtiles_path)
 
-        # Copy style file to output directory for relative access
-        style_copy_path = self._copy_style_file(style_path)
+        # Generate tileserver-gl-light config
+        self._create_tileserver_config(mbtiles_path, style_path)
 
-        # Generate complete HTML preview with tile server instructions
-        html_content = self._create_html_template(
-            mbtiles_path, style_copy_path, bbox
+        # Generate HTML preview optimized for tileserver-gl-light
+        html_content = self._create_tileserver_html_template(
+            mbtiles_path, style_path, bbox
         )
 
         with open(preview_path, "w", encoding="utf-8") as f:
             f.write(html_content)
 
-        # Generate a simple tile server script
-        self._create_tile_server_script(mbtiles_path)
+        # Generate setup instructions
+        self._create_setup_instructions(mbtiles_path)
 
         logger.info(f"HTML preview generated: {preview_path}")
         return preview_path
@@ -198,6 +198,392 @@ if __name__ == "__main__":
         server_script.chmod(0o755)
         
         logger.info(f"Tile server script created: {server_script}")
+
+    def _create_tileserver_config(self, mbtiles_path: Path, style_path: Path) -> None:
+        """Create tileserver-gl-light configuration file."""
+        config_path = self.output_dir / "config.json"
+        
+        # Extract tileset name from mbtiles filename
+        tileset_name = mbtiles_path.stem
+        
+        # Create tileserver-gl-light config
+        config = {
+            "options": {
+                "paths": {
+                    "mbtiles": str(mbtiles_path.parent.absolute())
+                },
+                "domains": ["localhost:8080"],
+                "formatQuality": {
+                    "jpeg": 80,
+                    "webp": 90
+                },
+                "maxzoom": 18,
+                "maxsize": 2048,
+                "pbfAlias": "pbf"
+            },
+            "styles": {},
+            "data": {}
+        }
+        
+        # Add MBTiles data source
+        config["data"][tileset_name] = {
+            "mbtiles": mbtiles_path.name
+        }
+        
+        # Add style if it exists
+        if style_path and style_path.exists():
+            style_name = f"{tileset_name}_style"
+            style_copy_path = self.output_dir / "styles" / f"{style_name}.json"
+            
+            # Create styles directory
+            style_copy_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Copy and modify style for tileserver-gl-light
+            with open(style_path, "r") as f:
+                style_data = json.load(f)
+            
+            # Update sources to use tileserver-gl-light URLs
+            if "sources" in style_data:
+                for source_name, source_config in style_data["sources"].items():
+                    if source_config.get("type") == "vector":
+                        source_config["url"] = f"mbtiles://{{{tileset_name}}}"
+            
+            # Write modified style
+            with open(style_copy_path, "w") as f:
+                json.dump(style_data, f, indent=2)
+            
+            config["styles"][style_name] = {
+                "style": f"styles/{style_name}.json",
+                "tilejson": {
+                    "type": "baselayer"
+                }
+            }
+        
+        # Write config file
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
+        
+        logger.info(f"Tileserver-gl-light config created: {config_path}")
+
+    def _create_setup_instructions(self, mbtiles_path: Path) -> None:
+        """Create setup instructions for tileserver-gl-light."""
+        instructions_path = self.output_dir / "README.md"
+        
+        tileset_name = mbtiles_path.stem
+        
+        instructions = f"""# Tilecraft Preview
+
+## Quick Start with tileserver-gl-light
+
+### 1. Install tileserver-gl-light
+```bash
+npm install -g tileserver-gl-light
+```
+
+### 2. Start the server (Option A - Simple)
+```bash
+# Point directly at your mbtiles file or directory
+tileserver-gl-light {mbtiles_path.absolute()}
+```
+
+### 2. Start the server (Option B - With config)
+```bash
+cd {self.output_dir.absolute()}
+tileserver-gl-light --config config.json
+```
+
+### 3. View your tiles
+- Open http://localhost:8080 in your browser
+- Select your dataset: `{tileset_name}`
+- Or view directly at: http://localhost:8080/data/{tileset_name}/
+
+## Alternative: Use the HTML preview
+- Open `preview.html` in your browser
+- It will automatically connect to tileserver-gl-light when running
+
+## Files included:
+- `config.json` - Tileserver-gl-light configuration (optional)
+- `preview.html` - Interactive HTML preview
+- `styles/` - MapLibre GL styles (if generated)
+
+## Troubleshooting:
+- Ensure tileserver-gl-light is installed and running on port 8080
+- Option A (direct file) is simpler and avoids config issues
+- View browser console for any loading errors
+"""
+        
+        with open(instructions_path, "w") as f:
+            f.write(instructions)
+        
+        logger.info(f"Setup instructions created: {instructions_path}")
+
+    def _create_tileserver_html_template(
+        self, mbtiles_path: Path, style_path: Path, bbox: BoundingBox
+    ) -> str:
+        """Create HTML template optimized for tileserver-gl-light."""
+        center_lng = (bbox.west + bbox.east) / 2
+        center_lat = (bbox.south + bbox.north) / 2
+        
+        # Calculate appropriate zoom level based on bbox size
+        lng_diff = abs(bbox.east - bbox.west)
+        lat_diff = abs(bbox.north - bbox.south)
+        max_diff = max(lng_diff, lat_diff)
+        
+        # Rough zoom calculation
+        if max_diff > 10:
+            zoom = 5
+        elif max_diff > 1:
+            zoom = 8
+        elif max_diff > 0.1:
+            zoom = 11
+        else:
+            zoom = 14
+
+        tileset_name = mbtiles_path.stem
+        style_name = f"{tileset_name}_style"
+
+        return f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Tilecraft Preview - {tileset_name}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://unpkg.com/maplibre-gl@4.4.1/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@4.4.1/dist/maplibre-gl.css" rel="stylesheet">
+    <style>
+        body {{ margin: 0; padding: 0; font-family: Arial, sans-serif; }}
+        #map {{ position: absolute; top: 0; bottom: 0; width: 100%; }}
+        .info {{
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255,255,255,0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            max-width: 350px;
+            z-index: 1000;
+        }}
+        .info h3 {{ margin: 0 0 10px 0; color: #333; }}
+        .info p {{ margin: 5px 0; font-size: 14px; color: #666; }}
+        .server-status {{ padding: 8px; border-radius: 4px; margin-top: 10px; }}
+        .server-offline {{ background: #ffebee; color: #c62828; }}
+        .server-online {{ background: #e8f5e8; color: #2e7d32; }}
+        .instructions {{ margin-top: 10px; font-size: 12px; }}
+        .instructions code {{ background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }}
+        .toggle-btn {{ 
+            background: #007acc; 
+            color: white; 
+            border: none; 
+            padding: 5px 10px; 
+            border-radius: 3px; 
+            cursor: pointer; 
+            margin-top: 5px;
+        }}
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="info">
+        <h3>🗺️ Tilecraft Preview</h3>
+        <p><strong>Dataset:</strong> {tileset_name}</p>
+        <p><strong>Bounds:</strong> {bbox.west:.3f}, {bbox.south:.3f}, {bbox.east:.3f}, {bbox.north:.3f}</p>
+        
+        <div id="server-status" class="server-status server-offline">
+            ⚠️ Tileserver-gl-light offline
+        </div>
+        
+        <div class="instructions">
+            <strong>To view tiles:</strong><br>
+            1. Install: <code>npm install -g tileserver-gl-light</code><br>
+            2. Run: <code>tileserver-gl-light --config config.json</code><br>
+            3. Open: <code>http://localhost:8080</code>
+        </div>
+        
+        <button id="toggle-info" class="toggle-btn">Hide Info</button>
+    </div>
+
+    <script>
+        // Initialize MapLibre GL with fallback
+        const map = new maplibregl.Map({{
+            container: 'map',
+            style: {{
+                "version": 8,
+                "sources": {{
+                    "osm": {{
+                        "type": "raster",
+                        "tiles": ["https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png"],
+                        "tileSize": 256,
+                        "attribution": "© OpenStreetMap contributors"
+                    }}
+                }},
+                "layers": [{{
+                    "id": "osm-background",
+                    "type": "raster",
+                    "source": "osm"
+                }}]
+            }},
+            center: [{center_lng}, {center_lat}],
+            zoom: {zoom}
+        }});
+
+        map.addControl(new maplibregl.NavigationControl());
+        map.addControl(new maplibregl.ScaleControl());
+
+        // Try to connect to tileserver-gl-light
+        let customStyleLoaded = false;
+
+        async function loadTileserverStyle() {{
+            if (customStyleLoaded) return;
+            
+            try {{
+                // Try style endpoint first
+                const styleResponse = await fetch('http://localhost:8080/styles/{style_name}/style.json');
+                if (styleResponse.ok) {{
+                    const style = await styleResponse.json();
+                    map.setStyle(style);
+                    updateServerStatus('✅ Tileserver-gl-light connected (with style)');
+                    customStyleLoaded = true;
+                    
+                    // Center map on the actual data bounds
+                    map.fitBounds([
+                        [{bbox.west}, {bbox.south}],
+                        [{bbox.east}, {bbox.north}]
+                    ], {{
+                        padding: 50,
+                        duration: 1000
+                    }});
+                    return;
+                }}
+                
+                // Fallback: try to load raw tiles
+                const tileResponse = await fetch('http://localhost:8080/data/{tileset_name}/0/0/0.pbf');
+                if (tileResponse.ok || tileResponse.status === 404) {{
+                    // Server is running, create basic style
+                    const basicStyle = {{
+                        "version": 8,
+                        "sources": {{
+                            "osm": {{
+                                "type": "raster",
+                                "tiles": ["https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png"],
+                                "tileSize": 256,
+                                "attribution": "© OpenStreetMap contributors"
+                            }},
+                            "tilecraft": {{
+                                "type": "vector",
+                                "tiles": ["http://localhost:8080/data/{tileset_name}/{{z}}/{{x}}/{{y}}.pbf"]
+                            }}
+                        }},
+                        "layers": [
+                            {{
+                                "id": "osm-background",
+                                "type": "raster",
+                                "source": "osm"
+                            }},
+                            {{
+                                "id": "tilecraft-lines",
+                                "type": "line",
+                                "source": "tilecraft",
+                                "source-layer": "{tileset_name}",
+                                "paint": {{
+                                    "line-color": "#ff6b6b",
+                                    "line-width": 2
+                                }}
+                            }},
+                            {{
+                                "id": "tilecraft-polygons",
+                                "type": "fill",
+                                "source": "tilecraft",
+                                "source-layer": "{tileset_name}",
+                                "paint": {{
+                                    "fill-color": "#4ecdc4",
+                                    "fill-opacity": 0.6
+                                }}
+                            }}
+                        ]
+                    }};
+                    
+                    map.setStyle(basicStyle);
+                    updateServerStatus('✅ Tileserver-gl-light connected (basic style)');
+                    customStyleLoaded = true;
+                    
+                    // Center map on the actual data bounds
+                    map.fitBounds([
+                        [{bbox.west}, {bbox.south}],
+                        [{bbox.east}, {bbox.north}]
+                    ], {{
+                        padding: 50,
+                        duration: 1000
+                    }});
+                }}
+            }} catch (error) {{
+                console.log('Tileserver-gl-light not available:', error);
+            }}
+        }}
+
+        function updateServerStatus(message) {{
+            const statusEl = document.getElementById('server-status');
+            statusEl.className = 'server-status server-online';
+            statusEl.innerHTML = message;
+        }}
+
+        // Check for tileserver every 3 seconds
+        setInterval(loadTileserverStyle, 3000);
+        
+        // Add bounding box visualization
+        map.on('load', () => {{
+            map.addSource('bbox', {{
+                'type': 'geojson',
+                'data': {{
+                    'type': 'Feature',
+                    'geometry': {{
+                        'type': 'Polygon',
+                        'coordinates': [[
+                            [{bbox.west}, {bbox.south}],
+                            [{bbox.east}, {bbox.south}],
+                            [{bbox.east}, {bbox.north}],
+                            [{bbox.west}, {bbox.north}],
+                            [{bbox.west}, {bbox.south}]
+                        ]]
+                    }}
+                }}
+            }});
+            
+            map.addLayer({{
+                'id': 'bbox-outline',
+                'type': 'line',
+                'source': 'bbox',
+                'paint': {{
+                    'line-color': '#ff0000',
+                    'line-width': 2,
+                    'line-dasharray': [2, 2]
+                }}
+            }});
+            
+            // Try to load custom style immediately
+            loadTileserverStyle();
+        }});
+
+        // Toggle info panel
+        document.getElementById('toggle-info').addEventListener('click', function() {{
+            const info = document.querySelector('.info');
+            const btn = this;
+            if (info.style.display === 'none') {{
+                info.style.display = 'block';
+                btn.textContent = 'Hide Info';
+            }} else {{
+                info.style.display = 'none';
+                btn.textContent = 'Show Info';
+            }}
+        }});
+
+        console.log('Tilecraft Preview initialized');
+        console.log('Dataset:', '{tileset_name}');
+        console.log('Center:', [{center_lng}, {center_lat}]);
+        console.log('Zoom:', {zoom});
+    </script>
+</body>
+</html>"""
 
     def _create_html_template(
         self, mbtiles_path: Path, style_path: Path, bbox: BoundingBox

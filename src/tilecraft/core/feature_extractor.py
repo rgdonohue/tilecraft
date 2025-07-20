@@ -459,7 +459,10 @@ class FeatureExtractor:
             
             # Administrative
             FeatureType.BOUNDARIES: {
-                "boundary": ["administrative", "political", "postal_code"]
+                "boundary": ["administrative", "political", "postal_code"],
+                "admin_level": ["*"],
+                "place": ["state", "county", "city", "town", "village"],
+                "tiger:cfcc": ["*"],  # US Census boundaries
             },
             FeatureType.PROTECTED_AREAS: {
                 "boundary": ["protected_area", "national_park"],
