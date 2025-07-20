@@ -1,0 +1,23 @@
+{
+  "options": {
+    "paths": {
+      "mbtiles": "/Users/richard/Documents/projects/tilecraft/output/tiles"
+    },
+    "domains": [
+      "localhost:8080"
+    ],
+    "formatQuality": {
+      "jpeg": 80,
+      "webp": 90
+    },
+    "maxzoom": 18,
+    "maxsize": 2048,
+    "pbfAlias": "pbf"
+  },
+  "styles": {},
+  "data": {
+    "co_roads": {
+      "mbtiles": "co_roads.mbtiles"
+    }
+  }
+}

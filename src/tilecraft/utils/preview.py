@@ -52,7 +52,7 @@ class PreviewGenerator:
         return None
 
     def generate_html_preview(
-        self, mbtiles_path: Path, style_path: Path, bbox: Optional[BoundingBox] = None
+        self, mbtiles_path: Path, style_path: Optional[Path] = None, bbox: Optional[BoundingBox] = None
     ) -> Path:
         """
         Generate interactive HTML preview with tileserver-gl-light integration.
@@ -74,9 +74,12 @@ class PreviewGenerator:
         # Generate tileserver-gl-light config
         self._create_tileserver_config(mbtiles_path, style_path)
 
+        # Extract source layer name from mbtiles
+        source_layer = self._extract_source_layer_name(mbtiles_path)
+
         # Generate HTML preview optimized for tileserver-gl-light
         html_content = self._create_tileserver_html_template(
-            mbtiles_path, style_path, bbox
+            mbtiles_path, style_path, bbox, source_layer
         )
 
         with open(preview_path, "w", encoding="utf-8") as f:
@@ -113,6 +116,30 @@ class PreviewGenerator:
 
         # Default fallback bounds (world view)
         return BoundingBox(west=-180, south=-85, east=180, north=85)
+
+    def _extract_source_layer_name(self, mbtiles_path: Path) -> str:
+        """Extract the source layer name from MBTiles metadata."""
+        try:
+            conn = sqlite3.connect(mbtiles_path)
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT value FROM metadata WHERE name = 'json'"
+                )
+                result = cursor.fetchone()
+                if result:
+                    metadata = json.loads(result[0])
+                    vector_layers = metadata.get("vector_layers", [])
+                    if vector_layers:
+                        # Return the first vector layer's ID
+                        return vector_layers[0].get("id", mbtiles_path.stem)
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.warning(f"Could not extract source layer name from MBTiles: {e}")
+        
+        # Fallback to filename without extension
+        return mbtiles_path.stem
 
     def _copy_style_file(self, style_path: Path) -> Path:
         """Copy style file to output directory for relative access."""
@@ -318,7 +345,7 @@ tileserver-gl-light --config config.json
         logger.info(f"Setup instructions created: {instructions_path}")
 
     def _create_tileserver_html_template(
-        self, mbtiles_path: Path, style_path: Path, bbox: BoundingBox
+        self, mbtiles_path: Path, style_path: Optional[Path], bbox: BoundingBox, source_layer: str
     ) -> str:
         """Create HTML template optimized for tileserver-gl-light."""
         center_lng = (bbox.west + bbox.east) / 2
@@ -484,20 +511,35 @@ tileserver-gl-light --config config.json
                                 "id": "tilecraft-lines",
                                 "type": "line",
                                 "source": "tilecraft",
-                                "source-layer": "{tileset_name}",
+                                "source-layer": "{source_layer}",
+                                "filter": ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]],
                                 "paint": {{
                                     "line-color": "#ff6b6b",
                                     "line-width": 2
                                 }}
                             }},
                             {{
+                                "id": "tilecraft-points",
+                                "type": "circle",
+                                "source": "tilecraft",
+                                "source-layer": "{source_layer}",
+                                "filter": ["==", ["geometry-type"], "Point"],
+                                "paint": {{
+                                    "circle-color": "#ff6b6b",
+                                    "circle-radius": 4,
+                                    "circle-stroke-color": "#ffffff",
+                                    "circle-stroke-width": 1
+                                }}
+                            }},
+                            {{
                                 "id": "tilecraft-polygons",
                                 "type": "fill",
                                 "source": "tilecraft",
-                                "source-layer": "{tileset_name}",
+                                "source-layer": "{source_layer}",
+                                "filter": ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
                                 "paint": {{
                                     "fill-color": "#4ecdc4",
-                                    "fill-opacity": 0.6
+                                    "fill-opacity": 0.3
                                 }}
                             }}
                         ]

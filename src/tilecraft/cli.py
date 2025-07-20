@@ -388,6 +388,86 @@ Files generated:
     console.print(panel)
 
 
+@cli.command("preview")
+@click.argument("mbtiles_path", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    default="preview",
+    type=click.Path(path_type=Path),
+    help="Output directory for preview files (default: 'preview')",
+)
+@click.option(
+    "--name", 
+    help="Custom name for the preview (default: derived from mbtiles filename)"
+)
+@click.option("--verbose", "-v", is_flag=True, help="Verbose output")
+def preview_tiles(mbtiles_path: Path, output: Path, name: Optional[str], verbose: bool):
+    """
+    Generate an interactive preview for existing MBTiles.
+    
+    Creates a complete preview package with tileserver-gl-light configuration,
+    HTML viewer, and setup instructions for any existing .mbtiles file.
+    
+    MBTILES_PATH: Path to the .mbtiles file to preview
+    
+    Example:
+        tilecraft preview output/cache/co_power_lines.mbtiles
+        tilecraft preview output/cache/co_power_lines.mbtiles --output my-preview
+    """
+    if not mbtiles_path.suffix.lower() == '.mbtiles':
+        console.print(f"[red]Error: File must be a .mbtiles file, got: {mbtiles_path}[/red]")
+        sys.exit(1)
+    
+    console.print(f"[bold blue]🗺️  Generating preview for {mbtiles_path.name}[/bold blue]\n")
+    
+    try:
+        from tilecraft.utils.preview import PreviewGenerator
+        
+        # Create output directory
+        output.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize preview generator
+        preview_generator = PreviewGenerator(output)
+        
+        # Generate preview (no style path needed for standalone preview)
+        with console.status("[bold green]Generating preview files..."):
+            preview_path = preview_generator.generate_html_preview(
+                mbtiles_path, None, None  # bbox will be extracted from mbtiles
+            )
+        
+        # Display results
+        console.print(f"[green]✓ Preview generated successfully![/green]\n")
+        
+        # Show file structure
+        files_created = list(output.glob("*"))
+        console.print("[bold]Files created:[/bold]")
+        for file_path in sorted(files_created):
+            if file_path.is_file():
+                console.print(f"  📄 {file_path.name}")
+            elif file_path.is_dir():
+                console.print(f"  📁 {file_path.name}/")
+        
+        console.print(f"\n[bold blue]To view your tiles:[/bold blue]")
+        console.print(f"[cyan]1. Install tileserver-gl-light:[/cyan]")
+        console.print(f"   npm install -g tileserver-gl-light")
+        console.print(f"\n[cyan]2. Start the tile server:[/cyan]")
+        console.print(f"   tileserver-gl-light {mbtiles_path.absolute()}")
+        console.print(f"\n[cyan]3. Open the preview:[/cyan]")
+        console.print(f"   open {preview_path}")
+        console.print(f"   (or open {preview_path} in your browser)")
+        
+        console.print(f"\n[green]🎉 Preview ready at: {output.absolute()}[/green]")
+        
+    except ImportError:
+        console.print("[red]Error: Preview functionality not available[/red]")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]Error generating preview: {e}[/red]")
+        if verbose:
+            console.print_exception()
+        sys.exit(1)
+
+
 @cli.command("features")
 @click.option("--category", help="Filter by category (water, natural, landuse, transportation, etc.)")
 @click.option("--search", help="Search feature names and descriptions")

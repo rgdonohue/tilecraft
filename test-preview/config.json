@@ -1,0 +1,23 @@
+{
+  "options": {
+    "paths": {
+      "mbtiles": "/Users/richard/Documents/projects/tilecraft/output/cache"
+    },
+    "domains": [
+      "localhost:8080"
+    ],
+    "formatQuality": {
+      "jpeg": 80,
+      "webp": 90
+    },
+    "maxzoom": 18,
+    "maxsize": 2048,
+    "pbfAlias": "pbf"
+  },
+  "styles": {},
+  "data": {
+    "89519c08a1ef5f10": {
+      "mbtiles": "89519c08a1ef5f10.mbtiles"
+    }
+  }
+}
